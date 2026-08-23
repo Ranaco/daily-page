@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "vite build",
+  "outputDirectory": "dist",
+  "framework": null,
+  "crons": [
+    { "path": "/api/cron/tick?slot=morning", "schedule": "40 1 * * *" },
+    { "path": "/api/cron/tick?slot=evening", "schedule": "50 18 * * *" }
+  ]
+}
