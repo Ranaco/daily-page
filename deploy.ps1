@@ -1,9 +1,9 @@
-﻿# Deploys The Daily Page to Vercel and wires up the Telegram webhook.
+# Deploys The Daily Page to Vercel and wires up the Telegram webhook.
 #
 #   .\deploy.ps1 -Token vcp_xxx     # token from vercel.com/account/settings/tokens
 #   .\deploy.ps1                    # or set $env:VERCEL_TOKEN first
 #
-# Idempotent â€” safe to re-run.
+# Idempotent — safe to re-run.
 
 param([string]$Token = $env:VERCEL_TOKEN)
 
@@ -56,11 +56,12 @@ foreach ($k in $required) {
 # --- deploy ---------------------------------------------------------------
 # Env vars are read at build time, so this must come AFTER pushing them.
 Write-Host "`n== deploying ==" -ForegroundColor Cyan
-$out = npx --yes vercel --prod --yes --token $Token 2>&1 | Out-String
-$alias = ([regex]::Matches($out, 'https://daily-page-[a-z0-9]+\.vercel\.app') |
-          ForEach-Object { $_.Value } | Where-Object { $_ -notmatch '-[a-z0-9]{9,}-' } |
-          Select-Object -Last 1)
-$alias = 'https://daily.ranax.co'   # custom domain; ignore the per-deploy URL
+npx --yes vercel --prod --yes --token $Token 2>&1 | Out-Null
+
+# The custom domain, never the per-deploy URL. Each deploy mints a fresh
+# immutable *.vercel.app URL frozen to that one build; pointing Telegram at
+# one would leave it talking to old code after the next deploy.
+$alias = 'https://daily.ranax.co'
 Write-Host "live at $alias" -ForegroundColor Green
 
 # --- telegram webhook -----------------------------------------------------
@@ -108,4 +109,3 @@ Write-Host ""
 Write-Host "Open the website link once per device - it sets a cookie for a year."
 Write-Host "Press Start in the bot chat before it can message you."
 Write-Host "Cron jobs are set up separately - see the README."
-

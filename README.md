@@ -1,4 +1,4 @@
-﻿# The Daily Page
+# The Daily Page
 
 A habit tracker built around one idea: **the reward has to land at the moment you do the thing.**
 A Telegram bot that pushes three times a day and rewards instantly, plus a comic-styled
@@ -8,11 +8,11 @@ Single user. No accounts, no teams, no social features.
 
 ---
 
-## The mechanics (these are the point â€” the code is just plumbing)
+## The mechanics (these are the point — the code is just plumbing)
 
 | Rule | Why |
 |---|---|
-| **Never miss twice** | One miss is logged, coloured yellow, costs nothing. Two in a row is the only thing the bot reacts to â€” and it reacts by offering to *halve* the habit, never to scold. |
+| **Never miss twice** | One miss is logged, coloured yellow, costs nothing. Two in a row is the only thing the bot reacts to — and it reacts by offering to *halve* the habit, never to scold. |
 | **The week is scored, not the day** | Hit 80% of available points and the week counts. One wrecked Tuesday gets absorbed instead of ending the run. |
 | **Points weighted by difficulty** | Waking at 7:15 is worth 5, ticking a box is worth 1. Flat scoring means farming the easy ones. |
 | **Points buy real things** | If points only buy a bigger number it's a spreadsheet. Once something is on the shelf, you don't buy it any other way. |
@@ -26,7 +26,7 @@ no disappointment, no zeroing out, offer smaller before harder, buttons over typ
 
 ## Setup
 
-### 1. Database â€” Neon
+### 1. Database — Neon
 
 Create a project at [console.neon.tech](https://console.neon.tech) and copy the
 **pooled** connection string.
@@ -38,11 +38,11 @@ npm run db:push           # creates the tables
 npm run db:seed           # loads habits from server/config.ts
 ```
 
-### 2. Bot â€” BotFather
+### 2. Bot — BotFather
 
-In Telegram, message [@BotFather](https://t.me/BotFather) â†’ `/newbot` â†’ copy the token
+In Telegram, message [@BotFather](https://t.me/BotFather) → `/newbot` → copy the token
 into `TELEGRAM_BOT_TOKEN`. Message [@userinfobot](https://t.me/userinfobot) to get your
-numeric id â†’ `TELEGRAM_OWNER_ID`. The bot ignores every other chat; that is the whole
+numeric id → `TELEGRAM_OWNER_ID`. The bot ignores every other chat; that is the whole
 auth model.
 
 Generate a secret for `APP_SECRET`:
@@ -53,24 +53,31 @@ openssl rand -hex 24        # or: node -e "console.log(crypto.randomUUID().repla
 
 ### 3. Deploy
 
-```bash
-npx vercel            # link the project
-npx vercel env add    # add all five vars, for Production
-npx vercel --prod
+```powershell
+.\deploy.ps1 -Token vcp_xxx     # token from vercel.com/account/settings/tokens
 ```
 
-Then set `PUBLIC_URL` in `.env` to the deployed origin and point Telegram at it:
+This pushes the env vars, deploys, registers the Telegram webhook, and verifies
+itself. It is idempotent — re-run it after any change.
 
-```bash
-npm run bot:register
-```
+> **Why it sets env vars through the REST API rather than `vercel env add`:**
+> piping a string to a native command's stdin in Windows PowerShell 5.1 prepends
+> a UTF-8 BOM, so every value lands one invisible character too long. An
+> `APP_SECRET` of 49 bytes instead of 48 fails every comparison and every
+> endpoint returns an opaque 401. This is worth knowing before you "simplify" it.
 
 Send the bot `/help`. If it answers, everything is wired.
 
 ### 4. Open the website
 
-Visit `https://daily.ranax.co/api/login?key=<APP_SECRET>` once per device. It sets an
-httpOnly cookie for a year and redirects you home.
+Live at **https://daily.ranax.co**.
+
+Visit `https://daily.ranax.co/api/login?key=<APP_SECRET>` once per device. It sets
+an httpOnly cookie for a year and redirects you home.
+
+The domain is a CNAME at Namecheap: `daily` → `c63e0d15ce60d14b.vercel-dns-017.com.`
+The webhook and `PUBLIC_URL` both point here rather than at a `*.vercel.app` URL,
+so the address survives redeploys.
 
 ---
 
@@ -79,7 +86,7 @@ httpOnly cookie for a year and redirects you home.
 The bot pushes at **7:10am, 1:15pm and 12:20am IST**. Times are driven by whatever
 hits `/api/cron/tick`.
 
-**Vercel's Hobby plan allows two cron jobs, once a day each** â€” so `vercel.json`
+**Vercel's Hobby plan allows two cron jobs, once a day each** — so `vercel.json`
 registers only morning and evening, and Hobby crons fire *somewhere within the hour*
 rather than at an exact minute. For a bot whose entire job is showing up at 7:10, that
 is not good enough.
@@ -96,7 +103,7 @@ is not good enough.
 Then delete the `crons` block from `vercel.json` so nothing fires twice.
 
 The morning job also handles week rollover and phase unlock announcements, and it is
-idempotent â€” running it twice in one day will not double-announce anything.
+idempotent — running it twice in one day will not double-announce anything.
 
 ---
 
@@ -114,7 +121,7 @@ npx tsx server/time.test.ts    # 19 assertions covering the boundary and forgive
 
 ## Changing the plan
 
-Everything is in **`server/config.ts`** â€” habits, points, phases, rewards. Edit it and:
+Everything is in **`server/config.ts`** — habits, points, phases, rewards. Edit it and:
 
 ```bash
 npm run db:seed
@@ -130,11 +137,11 @@ A redeploy should never quietly undo that. Use `npm run db:seed -- --force` to r
 
 ```
 api/              Vercel serverless functions
-  telegram.ts       webhook â€” commands and button taps
+  telegram.ts       webhook — commands and button taps
   cron/tick.ts      the three daily pushes
   state|toggle|claim|login.ts
 server/           shared server code
-  config.ts         THE PLAN â€” habits, points, phases, rewards
+  config.ts         THE PLAN — habits, points, phases, rewards
   messages.ts       every string the bot can say
   store.ts          scoring, forgiveness, week grid
   time.ts           logical days, weeks
@@ -149,4 +156,3 @@ web/              Vite + React front end
 /week     the grid            /note     the three lines
 /status   level, points, week /habits   pause or restore
 ```
-
