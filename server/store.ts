@@ -26,11 +26,16 @@ export async function setSetting(key: string, value: string) {
     .onConflictDoUpdate({ target: settings.key, set: { value } })
 }
 
-/** The day the plan started. Created on first read so nothing needs a manual step. */
+/**
+ * The day the plan started. Created on first read so nothing needs a manual step.
+ *
+ * Stores the ACTUAL day, not that week's Monday — snapping to Monday silently
+ * back-dates the plan by up to six days and burns phase 1 before it begins.
+ */
 export async function startedOn(): Promise<string> {
   const existing = await getSetting('started_on')
   if (existing) return existing
-  const today = weekStart(logicalDay())
+  const today = logicalDay()
   await setSetting('started_on', today)
   return today
 }

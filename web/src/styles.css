@@ -110,7 +110,7 @@ nav button[aria-selected="true"]{background:var(--red);color:#FFF7E8;-webkit-tex
 }
 @keyframes fade{0%{opacity:0}25%{opacity:1}100%{opacity:0}}
 
-.gridwrap{overflow-x:auto;padding:14px}
+.gridwrap{overflow-x:auto;padding:14px;-webkit-overflow-scrolling:touch}
 table{border-collapse:separate;border-spacing:0;width:100%;min-width:620px}
 th,td{padding:0;text-align:center}
 thead th{font-family:"Bangers",Impact,fantasy;font-size:1.05rem;color:var(--muted);padding-bottom:9px;letter-spacing:.06em}
@@ -118,13 +118,18 @@ thead th.today{color:var(--red)}
 tbody th{text-align:left;font-weight:800;font-size:.84rem;padding:0 12px 0 2px;white-space:nowrap;line-height:1.2}
 tbody th small{display:block;font-weight:600;font-size:.7rem;color:var(--muted);font-variant-numeric:tabular-nums}
 tbody tr td{padding:3px}
-.cell{width:100%;aspect-ratio:1;max-width:46px;margin:0 auto;border:2.5px solid var(--outline);border-radius:2px;background:var(--panel);display:flex;align-items:center;justify-content:center;font-family:"Bangers";font-size:1.1rem;color:var(--ink)}
+
+/* Fixed pixel size, not width:100%. With a percentage the square had no
+   intrinsic width, so the table sized each day column from leftover space
+   and the cells came out uneven. A real size makes every column measure the
+   same and the squares stay square at any viewport. */
+.cell{width:34px;height:34px;margin:0 auto;border:2.5px solid var(--outline);border-radius:2px;background:var(--panel);display:flex;align-items:center;justify-content:center;font-family:"Bangers";font-size:1.05rem;color:var(--ink)}
 .cell.done{background:var(--green);color:#0B2712;box-shadow:2px 2px 0 var(--shadow)}
 .cell.forgiven{background:var(--yellow);color:#14110F}
 .cell.future{background:var(--sunk);border-color:var(--locked);color:transparent}
 .cell.lockedcell{background:repeating-linear-gradient(45deg,var(--sunk) 0 5px,transparent 5px 10px);border-color:var(--locked)}
 .cell.now{border-color:var(--red);border-width:3.5px}
-td.total .cell{background:var(--blue);color:#FFF7E8;font-size:.95rem;max-width:52px;aspect-ratio:auto;padding:8px 4px}
+td.total .cell{background:var(--blue);color:#FFF7E8;font-size:.95rem;width:44px;height:34px}
 .legend2{display:flex;flex-wrap:wrap;gap:14px;padding:12px 0 2px;font-size:.75rem;color:var(--muted);align-items:center}
 .legend2 span{display:flex;align-items:center;gap:6px}
 .legend2 i{width:15px;height:15px;border:2.5px solid var(--outline);display:block;border-radius:2px}

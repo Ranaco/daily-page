@@ -32,9 +32,19 @@ is('Sunday belongs to the week that began Monday', weekStart('2026-08-16'), '202
 is('Monday is its own week start', weekStart('2026-08-10'), '2026-08-10')
 is('seven days', weekDays('2026-08-10').length, 7)
 is('last day is Sunday', dayOfWeek(weekDays('2026-08-10')[6]!), 0)
-is('week index counts from the start week', weekIndex('2026-08-12', '2026-08-26'), 2)
+is('week index counts whole weeks elapsed', weekIndex('2026-08-12', '2026-08-26'), 2)
 is('same week is index 0', weekIndex('2026-08-10', '2026-08-16'), 0)
-is('phase 2 lands in week 3', weekIndex('2026-08-10', '2026-08-24'), 2)
+is('fourteen days is index 2', weekIndex('2026-08-10', '2026-08-24'), 2)
+
+// The regression that shipped: starting on a Sunday used to snap the start
+// back to the previous Monday, so the very next day counted as week 2.
+is('a Sunday start still gets a full first week',
+  weekIndex('2026-08-23', '2026-08-24'), 0)
+is('day six of a Sunday start is still week 1',
+  weekIndex('2026-08-23', '2026-08-29'), 0)
+is('day seven rolls over',
+  weekIndex('2026-08-23', '2026-08-30'), 1)
+is('start day itself is week 1', weekIndex('2026-08-24', '2026-08-24'), 0)
 
 // --- never miss twice ---------------------------------------------------
 const ticks = new Map<string, Set<string>>([
