@@ -1,4 +1,4 @@
-# The Daily Page
+﻿# The Daily Page
 
 A habit tracker built around one idea: **the reward has to land at the moment you do the thing.**
 A Telegram bot that pushes three times a day and rewards instantly, plus a comic-styled
@@ -8,11 +8,11 @@ Single user. No accounts, no teams, no social features.
 
 ---
 
-## The mechanics (these are the point — the code is just plumbing)
+## The mechanics (these are the point â€” the code is just plumbing)
 
 | Rule | Why |
 |---|---|
-| **Never miss twice** | One miss is logged, coloured yellow, costs nothing. Two in a row is the only thing the bot reacts to — and it reacts by offering to *halve* the habit, never to scold. |
+| **Never miss twice** | One miss is logged, coloured yellow, costs nothing. Two in a row is the only thing the bot reacts to â€” and it reacts by offering to *halve* the habit, never to scold. |
 | **The week is scored, not the day** | Hit 80% of available points and the week counts. One wrecked Tuesday gets absorbed instead of ending the run. |
 | **Points weighted by difficulty** | Waking at 7:15 is worth 5, ticking a box is worth 1. Flat scoring means farming the easy ones. |
 | **Points buy real things** | If points only buy a bigger number it's a spreadsheet. Once something is on the shelf, you don't buy it any other way. |
@@ -26,7 +26,7 @@ no disappointment, no zeroing out, offer smaller before harder, buttons over typ
 
 ## Setup
 
-### 1. Database — Neon
+### 1. Database â€” Neon
 
 Create a project at [console.neon.tech](https://console.neon.tech) and copy the
 **pooled** connection string.
@@ -38,11 +38,11 @@ npm run db:push           # creates the tables
 npm run db:seed           # loads habits from server/config.ts
 ```
 
-### 2. Bot — BotFather
+### 2. Bot â€” BotFather
 
-In Telegram, message [@BotFather](https://t.me/BotFather) → `/newbot` → copy the token
+In Telegram, message [@BotFather](https://t.me/BotFather) â†’ `/newbot` â†’ copy the token
 into `TELEGRAM_BOT_TOKEN`. Message [@userinfobot](https://t.me/userinfobot) to get your
-numeric id → `TELEGRAM_OWNER_ID`. The bot ignores every other chat; that is the whole
+numeric id â†’ `TELEGRAM_OWNER_ID`. The bot ignores every other chat; that is the whole
 auth model.
 
 Generate a secret for `APP_SECRET`:
@@ -69,7 +69,7 @@ Send the bot `/help`. If it answers, everything is wired.
 
 ### 4. Open the website
 
-Visit `https://<your-app>/api/login?key=<APP_SECRET>` once per device. It sets an
+Visit `https://daily.ranax.co/api/login?key=<APP_SECRET>` once per device. It sets an
 httpOnly cookie for a year and redirects you home.
 
 ---
@@ -79,7 +79,7 @@ httpOnly cookie for a year and redirects you home.
 The bot pushes at **7:10am, 1:15pm and 12:20am IST**. Times are driven by whatever
 hits `/api/cron/tick`.
 
-**Vercel's Hobby plan allows two cron jobs, once a day each** — so `vercel.json`
+**Vercel's Hobby plan allows two cron jobs, once a day each** â€” so `vercel.json`
 registers only morning and evening, and Hobby crons fire *somewhere within the hour*
 rather than at an exact minute. For a bot whose entire job is showing up at 7:10, that
 is not good enough.
@@ -89,14 +89,14 @@ is not good enough.
 
 | When (IST) | URL |
 |---|---|
-| 07:10 | `https://<app>/api/cron/tick?slot=morning&key=<APP_SECRET>` |
-| 13:15 | `https://<app>/api/cron/tick?slot=midday&key=<APP_SECRET>` |
-| 00:20 | `https://<app>/api/cron/tick?slot=evening&key=<APP_SECRET>` |
+| 07:10 | `https://daily.ranax.co/api/cron/tick?slot=morning&key=<APP_SECRET>` |
+| 13:15 | `https://daily.ranax.co/api/cron/tick?slot=midday&key=<APP_SECRET>` |
+| 00:20 | `https://daily.ranax.co/api/cron/tick?slot=evening&key=<APP_SECRET>` |
 
 Then delete the `crons` block from `vercel.json` so nothing fires twice.
 
 The morning job also handles week rollover and phase unlock announcements, and it is
-idempotent — running it twice in one day will not double-announce anything.
+idempotent â€” running it twice in one day will not double-announce anything.
 
 ---
 
@@ -114,7 +114,7 @@ npx tsx server/time.test.ts    # 19 assertions covering the boundary and forgive
 
 ## Changing the plan
 
-Everything is in **`server/config.ts`** — habits, points, phases, rewards. Edit it and:
+Everything is in **`server/config.ts`** â€” habits, points, phases, rewards. Edit it and:
 
 ```bash
 npm run db:seed
@@ -130,11 +130,11 @@ A redeploy should never quietly undo that. Use `npm run db:seed -- --force` to r
 
 ```
 api/              Vercel serverless functions
-  telegram.ts       webhook — commands and button taps
+  telegram.ts       webhook â€” commands and button taps
   cron/tick.ts      the three daily pushes
   state|toggle|claim|login.ts
 server/           shared server code
-  config.ts         THE PLAN — habits, points, phases, rewards
+  config.ts         THE PLAN â€” habits, points, phases, rewards
   messages.ts       every string the bot can say
   store.ts          scoring, forgiveness, week grid
   time.ts           logical days, weeks
@@ -149,3 +149,4 @@ web/              Vite + React front end
 /week     the grid            /note     the three lines
 /status   level, points, week /habits   pause or restore
 ```
+

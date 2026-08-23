@@ -1,9 +1,9 @@
-# Deploys The Daily Page to Vercel and wires up the Telegram webhook.
+﻿# Deploys The Daily Page to Vercel and wires up the Telegram webhook.
 #
 #   .\deploy.ps1 -Token vcp_xxx     # token from vercel.com/account/settings/tokens
 #   .\deploy.ps1                    # or set $env:VERCEL_TOKEN first
 #
-# Idempotent — safe to re-run.
+# Idempotent â€” safe to re-run.
 
 param([string]$Token = $env:VERCEL_TOKEN)
 
@@ -60,7 +60,7 @@ $out = npx --yes vercel --prod --yes --token $Token 2>&1 | Out-String
 $alias = ([regex]::Matches($out, 'https://daily-page-[a-z0-9]+\.vercel\.app') |
           ForEach-Object { $_.Value } | Where-Object { $_ -notmatch '-[a-z0-9]{9,}-' } |
           Select-Object -Last 1)
-if (-not $alias) { $alias = 'https://daily-page-pi.vercel.app' }
+$alias = 'https://daily.ranax.co'   # custom domain; ignore the per-deploy URL
 Write-Host "live at $alias" -ForegroundColor Green
 
 # --- telegram webhook -----------------------------------------------------
@@ -108,3 +108,4 @@ Write-Host ""
 Write-Host "Open the website link once per device - it sets a cookie for a year."
 Write-Host "Press Start in the bot chat before it can message you."
 Write-Host "Cron jobs are set up separately - see the README."
+
