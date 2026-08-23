@@ -91,11 +91,21 @@ export const REWARDS = [
  * the failure mode being guarded against is starting everything at once,
  * and "I had a great week so I'll add five habits" is exactly that failure
  * wearing a reward hat.
+ *
+ * One week per phase. An earlier version used two, which put drawing — the
+ * habit most likely to make any of this *feel* like something — five weeks
+ * out. Motivation is highest at the start and that ramp spent it on nothing.
+ *
+ * The cost is real: by week 4 the full set is live, which is a lot of habits
+ * arriving quickly. What makes that acceptable rather than reckless is the
+ * relief valve in missedTwice() — the bot offers to halve or pause anything
+ * being missed, so an overloaded week shrinks the load instead of collapsing
+ * the whole run.
  */
 export function phaseForWeek(weekIndex: number): 1 | 2 | 3 | 4 {
-  if (weekIndex < 2) return 1
-  if (weekIndex < 4) return 2
-  if (weekIndex < 6) return 3
+  if (weekIndex < 1) return 1
+  if (weekIndex < 2) return 2
+  if (weekIndex < 3) return 3
   return 4
 }
 

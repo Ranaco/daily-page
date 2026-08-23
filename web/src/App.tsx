@@ -4,7 +4,7 @@ import { AppState, claim, getState, toggle } from './api.js'
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const MARK: Record<string, string> = { done: '✓', forgiven: '–', miss: '', future: '', locked: '' }
 const PHASE_NAMES = ['', 'The clock', 'The body', 'The mind', 'The world']
-const UNLOCK_WEEK: Record<number, number> = { 2: 3, 3: 5, 4: 7 }
+const UNLOCK_WEEK: Record<number, number> = { 2: 2, 3: 3, 4: 4 }
 
 type Tab = 'today' | 'week' | 'rewards'
 
