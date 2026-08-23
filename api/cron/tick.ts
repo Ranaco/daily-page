@@ -28,14 +28,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     if (slot === 'morning') await morning(today)
-    else if (slot === 'midday') await midday(today)
-    else if (slot === 'evening') await evening(today)
-    else return res.status(400).json({ error: 'unknown slot' })
+    else if (slot === 'lunch') await nudge(today, 'lunch', M.lunch)
+    else if (slot === 'midday') await nudge(today, 'midday', M.midday)
+    else if (slot === 'draw') await nudge(today, 'draw', M.draw)
+    else if (slot === 'wrap' || slot === 'evening') await wrap(today)
+    else return res.status(400).json({ error: `unknown slot: ${slot}` })
     return res.status(200).json({ ok: true, slot, day: today })
   } catch (err) {
     console.error('cron failed', err)
     return res.status(500).json({ error: String(err) })
   }
+}
+
+/**
+ * The shape every mid-day push shares: take the habits due in this slot, drop
+ * the ones already ticked, and stay silent if nothing is left. Silence matters
+ * more than the reminder — a bot that pings when there is nothing to do is the
+ * one that gets muted.
+ */
+async function nudge(
+  today: string,
+  slot: string,
+  build: (s: Awaited<ReturnType<typeof getState>>, list: any[]) => { text: string; rows: any[] } | null,
+) {
+  const state = await getState(today)
+  const due = (await habitsBySlot(slot, today)).filter(
+    (h) => !state.tasks.find((t) => t.id === h.id)?.done,
+  )
+  const msg = build(state, due)
+  if (msg) await send(msg.text, msg.rows)
 }
 
 async function morning(today: string) {
@@ -57,16 +78,7 @@ async function morning(today: string) {
   }
 }
 
-async function midday(today: string) {
-  const state = await getState(today)
-  const due = (await habitsBySlot('midday', today)).filter(
-    (h) => !state.tasks.find((t) => t.id === h.id)?.done,
-  )
-  const msg = M.midday(state, due)
-  if (msg) await send(msg.text, msg.rows)
-}
-
-async function evening(today: string) {
+async function wrap(today: string) {
   const state = await getState(today)
   const remaining = state.tasks.filter((t) => !t.done)
   const { text, rows } = M.evening(state, remaining as any)

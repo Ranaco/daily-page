@@ -3,12 +3,27 @@
  * is how you change habits — nothing else reads a hardcoded list.
  */
 
+/**
+ * The five daily pushes, and the local time each one fires.
+ * A habit's `slot` decides which push is the first to mention it; the wrap-up
+ * always lists whatever is still unticked, so nothing can fall through.
+ */
+export const SLOTS = {
+  morning: '07:10',  // the list for the day
+  lunch:   '12:15',  // fires BEFORE lunch — ordering at 12:15 is the whole point
+  midday:  '13:20',  // the post-meal walk
+  draw:    '21:00',  // the drawing block, the highest-value habit
+  wrap:    '00:20',  // three lines, and anything still open
+} as const
+
+export type Slot = keyof typeof SLOTS
+
 export type Habit = {
   id: string
   phase: 1 | 2 | 3 | 4
-  /** Display time. Also decides which of the three daily pushes mentions it. */
+  /** Display time. Also decides which push mentions it first. */
   time: string
-  slot: 'morning' | 'midday' | 'evening'
+  slot: Slot
   label: string
   sub: string
   points: number
@@ -25,7 +40,7 @@ export const HABITS: Habit[] = [
     label: 'Up, feet on the floor', sub: 'Inside 60 seconds. Phone stays face-down.' },
   { id: 'out',    phase: 1, time: '7:20',    slot: 'morning', points: 5, spine: true,
     label: 'Outside, 15 minutes',   sub: 'Daylight and walking. No phone, no earphones.' },
-  { id: 'lights', phase: 1, time: '1:00',    slot: 'evening', points: 5, spine: true,
+  { id: 'lights', phase: 1, time: '1:00',    slot: 'wrap',    points: 5, spine: true,
     label: 'Lights out',            sub: 'At 1:00, not "when tired".' },
 
   // ---- Phase 2 · the body ----------------------------------------------
@@ -33,7 +48,7 @@ export const HABITS: Habit[] = [
     label: 'Move, 25 minutes',      sub: 'Mon/Wed/Fri aerobic. Tue/Thu strength.' },
   { id: 'bfast',  phase: 2, time: '8:20',    slot: 'morning', points: 2, spine: false,
     label: 'Protein breakfast',     sub: 'Eggs, curd, paneer. Kills the 2pm crash.' },
-  { id: 'lunch',  phase: 2, time: '12:45',   slot: 'midday',  points: 2, spine: false,
+  { id: 'lunch',  phase: 2, time: '12:45',   slot: 'lunch',   points: 2, spine: false,
     label: 'Lunch at 12:45',        sub: 'Protein and veg first, rice last.' },
   { id: 'pwalk',  phase: 2, time: '1:20',    slot: 'midday',  points: 2, spine: false,
     label: 'Walk after lunch',      sub: '10 minutes. Best single fix for the slump.' },
@@ -43,21 +58,21 @@ export const HABITS: Habit[] = [
     label: 'Read aloud, 10 min',    sub: 'Standing, louder than feels natural.' },
   { id: 'read',   phase: 3, time: '9:15',    slot: 'morning', points: 3, spine: false,
     label: 'Read, 15 minutes',      sub: 'Paper book. Phone in another room.' },
-  { id: 'deep',   phase: 3, time: '10:00',   slot: 'midday',  points: 4, spine: false,
+  { id: 'deep',   phase: 3, time: '10:00',   slot: 'lunch',   points: 4, spine: false,
     label: 'Deep block, 90 min',    sub: 'One hard problem. No Slack, door shut.' },
-  { id: 'draw',   phase: 3, time: '9:00 pm', slot: 'evening', points: 4, spine: true,
+  { id: 'draw',   phase: 3, time: '9:00 pm', slot: 'draw',    points: 4, spine: true,
     label: 'Draw, 45 minutes',      sub: 'No outcome, nothing to post. Screens off.' },
-  { id: 'log',    phase: 3, time: '12:30',   slot: 'evening', points: 2, spine: false,
+  { id: 'log',    phase: 3, time: '12:30',   slot: 'wrap',    points: 2, spine: false,
     label: 'Three lines',           sub: 'What happened. What you felt, and where. One thing tomorrow.' },
 
   // ---- Phase 4 · the world ---------------------------------------------
-  { id: 'rung',   phase: 4, time: '7:00 pm', slot: 'evening', points: 5, spine: false,
+  { id: 'rung',   phase: 4, time: '7:00 pm', slot: 'draw',    points: 5, spine: false,
     days: [2, 4],
     label: 'Social rung',           sub: 'Current rung on the ladder. Tue and Thu.' },
-  { id: 'place',  phase: 4, time: 'Sat',     slot: 'evening', points: 3, spine: false,
+  { id: 'place',  phase: 4, time: 'Sat',     slot: 'draw',    points: 3, spine: false,
     weekly: true,
     label: 'One new place',         sub: 'Somewhere in the city you have never been.' },
-  { id: 'home',   phase: 4, time: 'Sun',     slot: 'midday',  points: 3, spine: false,
+  { id: 'home',   phase: 4, time: 'Sun',     slot: 'lunch',   points: 3, spine: false,
     weekly: true,
     label: 'Call home',             sub: 'Parents, siblings. Voice, not text.' },
 ]

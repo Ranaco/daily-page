@@ -37,11 +37,39 @@ export function morning(state: AppState, list: HabitRow[]) {
   }
 }
 
+/**
+ * Fires at 12:15, half an hour BEFORE the target lunch. Reminding you at 12:45
+ * would be useless — by then the ordering decision has already been made badly.
+ */
+export function lunch(state: AppState, list: HabitRow[]) {
+  if (!list.length) return null
+  return {
+    text: [
+      '<b>Order lunch now.</b>',
+      '',
+      'Not at 2. Protein and veg first, rice last.',
+    ].join('\n'),
+    rows: [...list.map((h) => [tickBtn(h, state.today)]), [{ text: 'Already sorted', data: 'noop' }]],
+  }
+}
+
 export function midday(state: AppState, list: HabitRow[]) {
   if (!list.length) return null
   return {
-    text: `<b>Midday.</b> Anything to tick?`,
-    rows: [...list.map((h) => [tickBtn(h, state.today)]), [{ text: 'Nothing right now', data: 'noop' }]],
+    text: `<b>Ten minutes outside after eating.</b> Best single fix for the slump.`,
+    rows: [...list.map((h) => [tickBtn(h, state.today)]), [{ text: 'Not today', data: 'noop' }]],
+  }
+}
+
+/** 21:00 — the highest-value habit in the day gets its own push. */
+export function draw(state: AppState, list: HabitRow[]) {
+  if (!list.length) return null
+  const drawing = list.find((h) => h.id === 'draw')
+  return {
+    text: drawing
+      ? ['<b>Drawing block.</b>', '', 'No outcome, nothing to post. Screens off, music on.'].join('\n')
+      : '<b>Evening.</b> Anything to tick?',
+    rows: [...list.map((h) => [tickBtn(h, state.today)]), [{ text: 'Skip tonight', data: 'noop' }]],
   }
 }
 
