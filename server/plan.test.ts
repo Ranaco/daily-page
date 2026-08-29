@@ -1,7 +1,7 @@
 import { ALL_TOPICS, MODES } from './config.js'
 import {
-  ladderRung, modeSpread, pickTopic, projectModeLeft, rungText,
-  underTargetRun, valveCandidates, weekValveTripped,
+  holdsLeft, ladderRung, modeSpread, pickTopic, projectModeLeft, rungText,
+  shelfLocks, shouldAdvance, underTargetRun, valveCandidates, weekValveTripped,
 } from './plan.js'
 
 let failed = 0
@@ -39,6 +39,26 @@ is('80 exactly is not under target', underTargetRun([80]), 0)
 is('valve needs two', weekValveTripped([70]), false)
 is('valve trips on two', weekValveTripped([70, 60]), true)
 is('valve resets on a good week', weekValveTripped([60, 60, 85]), false)
+
+// ------------------------------------------------------------ phase gate
+
+is('a clear week opens the next phase', shouldAdvance(75, 1), { advance: true, reason: 'earned' })
+is('70 exactly clears the gate', shouldAdvance(70, 1), { advance: true, reason: 'earned' })
+is('69 does not', shouldAdvance(69, 1), { advance: false, reason: 'held' })
+is('under the gate holds the phase', shouldAdvance(50, 1), { advance: false, reason: 'held' })
+is('a second bad week still holds', shouldAdvance(50, 2), { advance: false, reason: 'held' })
+is('the third opens it anyway', shouldAdvance(50, 3), { advance: true, reason: 'elapsed' })
+is('and cannot strand past that', shouldAdvance(0, 9), { advance: true, reason: 'elapsed' })
+is('two holds available at first', holdsLeft(1), 2)
+is('one after the second week', holdsLeft(2), 1)
+is('none left on the third', holdsLeft(3), 0)
+is('holds never go negative', holdsLeft(99), 0)
+
+// the two lines do different jobs: 75% opens the phase but does not count
+is('75 opens the phase', shouldAdvance(75, 1).advance, true)
+is('75 still locks the shelf', shelfLocks(75), true)
+is('80 does not lock the shelf', shelfLocks(80), false)
+is('a bad week locks it', shelfLocks(41), true)
 
 // -------------------------------------------------------------- candidates
 

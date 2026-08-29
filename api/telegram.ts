@@ -175,6 +175,10 @@ async function onCallback(cq: any) {
 
   if (kind === 'claim' && a) {
     const result = await claimReward(a)
+    if (!result.ok && result.locked) {
+      await answer(cq.id, 'Shelf locked')
+      return send(M.shelfLocked(result.locked))
+    }
     if (!result.ok) return answer(cq.id, `${result.short} points short.`)
     const state = await getState()
     await answer(cq.id, 'Claimed')

@@ -16,7 +16,9 @@ Single user. No accounts, no teams, no social features.
 | **The week is scored, not the day** | Hit 80% of available points and the week counts. One wrecked Tuesday gets absorbed instead of ending the run. |
 | **Points weighted by difficulty** | Waking at 7:15 is worth 5, ticking a box is worth 1. Flat scoring means farming the easy ones. |
 | **Points buy real things** | If points only buy a bigger number it's a spreadsheet. Once something is on the shelf, you don't buy it any other way. |
-| **Phases unlock on time, not performance** | Phase 2 opens in week 2 regardless of how week 1 went. The lock guards against starting everything at once, which is the actual failure mode. |
+| **Phases are earned, and cannot be rushed** | A week at 70% or better opens the next phase. Under that, the phase repeats — but three weeks in one phase and it opens anyway. You can be held back twice; you cannot be stranded. |
+| **The two lines do different jobs** | 80% is whether the week *counted* (and whether the shelf stays open). 70% is whether the next phase opens. |
+| **An under-target week locks the shelf** | Points keep banking; spending pauses for the following week. Nothing is deducted and nothing resets. |
 | **XP never resets** | Its only job is to make eight weeks of unremarkable days visibly add up. |
 | **The first week gives, it does not take** | Phase 1 is the hour that belongs to you, a book and the sketchbook — and it does *not* move your wake time. The clock only moves in phase 2. See below. |
 | **Two bad weeks shrinks the load** | Never-miss-twice is blind to 65% every week with nothing missed twice. The week valve catches that and offers to drop the cheapest habits. |
@@ -36,12 +38,15 @@ memory trouble and emotional flatness. The first phase was pointed the wrong way
 
 So:
 
-| Phase | Week | What opens |
-|---|---|---|
-| 1 · what you miss | 1 | The first hour, reading, the sketchbook, the three lines |
-| 2 · the clock, and her | 2 | Wake 07:30, outside, the call at 23:30, lights out 00:30 |
-| 3 · the body, and the voice | 3 | Movement, meals, the walk, reading aloud, the Saturday talk |
-| 4 · the world | 4 | The social rung, one new place, calling home, the Sunday hour |
+| Phase | What opens |
+|---|---|
+| 1 · what you miss | The first hour, reading, the sketchbook, the three lines |
+| 2 · the clock, and her | Wake 07:30, outside, the call at 23:30, lights out 00:30 |
+| 3 · the body, and the voice | Movement, meals, the walk, reading aloud, the Saturday talk |
+| 4 · the world | The social rung, one new place, calling home, the Sunday hour |
+
+Each phase needs one week at or above the gate to open the next. Earliest
+completion is therefore four weeks; the slowest possible is twelve.
 
 Phase 1 takes nothing away. Phase 2 moves the clock only once there is a reason
 to be awake earlier, and only once the 00:30–02:00 tail has lost its job — which
@@ -49,6 +54,49 @@ is the whole point of putting the drawing block at 21:00 first.
 
 **The floor is seven hours.** If 00:30 will not hold, move `wake` later rather
 than moving `lights` earlier.
+
+---
+
+## The gate, and why it is 70 and not 80
+
+Progression is earned rather than handed over by the calendar — a week under the
+gate repeats the phase. Two numbers rather than one, because they answer
+different questions:
+
+- **80%** — did the week count? Gates XP milestones and the reward shelf.
+- **70%** — does the next phase open?
+
+The gate is lower on purpose. At 80% the slack is 1.4 days of total collapse per
+week, in every phase:
+
+| Phase | Points/week | Slack at 80% | Slack at 70% |
+|---|---|---|---|
+| 1 | 105 | 21 pts · 1.4 days | 31 pts · 2.1 days |
+| 2 | 238 | 47 pts · 1.4 days | 71 pts · 2.1 days |
+| 3 | 328 | 65 pts · 1.4 days | 98 pts · 2.1 days |
+| 4 | 347 | 69 pts · 1.5 days | 104 pts · 2.3 days |
+
+Gating at 80% keys progression to a single wrecked weekend, which is currently
+the most broken part of the week — it would hold back the plan on exactly the
+thing the plan has not fixed yet.
+
+**`PHASE_MAX_WEEKS = 3`** is the backstop. Without it, the habits aimed at the
+actual complaint — the ladder, new places, the talk, calling home — sit in phases
+3 and 4 and become the least reachable things in the plan. A repeated phase also
+means the same handful of habits for a month, which is the monotony this exists
+to break. So the gate can hold you back twice and then stops.
+
+The phase lives in `settings.phase`, not in a date calculation. `phaseForWeek()`
+survives only to seed it on first read, so an existing run keeps the phase it
+had. `phase_override` still wins over everything if you need to force it.
+
+### Weekly habits now count toward the score
+
+They were excluded from `week.pct` entirely, which made the Saturday talk — six
+points, the highest-value single habit — worth nothing toward the week. Harmless
+while the score was decoration; not harmless once it gates the next phase. A
+weekly habit becomes *available* on the weekday in its `days`, and only once that
+day has elapsed, so an unstarted Saturday does not drag Tuesday down.
 
 ---
 
@@ -313,6 +361,7 @@ npm run typecheck
 ```
 
 `server/plan.ts` holds every decision that is a pure function of its arguments —
-which topic, whether the valve trips, what to offer, where the ladder stands.
+which topic, whether the phase advances, whether the shelf locks, whether the
+valve trips, what to offer, where the ladder stands.
 That is deliberate: it is the part worth testing, and it has no database, no
 Telegram and no clock in it.

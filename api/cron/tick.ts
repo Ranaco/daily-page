@@ -5,8 +5,8 @@ import { WEEK_VALVE_AFTER } from '../../server/config.js'
 import { valveCandidates, weekValveTripped } from '../../server/plan.js'
 import { addDays, dayOfWeek, logicalDay, weekStart } from '../../server/time.js'
 import {
-  allHabits, closedWeekPcts, currentPhase, getSetting, getState, habitsBySlot,
-  markTick, missedTwice, setSetting, talkStage, weekTopic,
+  advancePhase, allHabits, closedWeekPcts, currentPhase, getSetting, getState,
+  habitsBySlot, lockShelfFor, markTick, missedTwice, setSetting, talkStage, weekTopic,
 } from '../../server/store.js'
 
 export const config = { maxDuration: 30 }
@@ -131,8 +131,12 @@ async function announceWeekAndPhase(today: string) {
   const lastAnnounced = await getSetting('last_week_announced')
 
   if (lastAnnounced && lastAnnounced !== thisWeek) {
+    // Read the closing week BEFORE the phase moves, or its score is measured
+    // against a phase that was not live while it was being earned.
     const closing = await getState(addDays(thisWeek, -1))
-    await send(M.weekClosed(closing))
+    const verdict = await advancePhase(closing.week.pct)
+    if (!closing.week.counts) await lockShelfFor(thisWeek)
+    await send(M.weekClosed(closing, verdict))
     await maybeWeekValve(today)
   }
 

@@ -4,7 +4,6 @@ import { AppState, claim, getState, toggle } from './api.js'
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const MARK: Record<string, string> = { done: '✓', forgiven: '–', miss: '', future: '', locked: '' }
 const PHASE_NAMES = ['', 'The clock', 'The body', 'The mind', 'The world']
-const UNLOCK_WEEK: Record<number, number> = { 2: 2, 3: 3, 4: 4 }
 
 type Tab = 'today' | 'week' | 'rewards'
 
@@ -160,11 +159,26 @@ export default function App() {
 
           {state.phase < 4 && (
             <div className="panel note">
-              <h3>Phase {state.phase + 1} opens in week {UNLOCK_WEEK[state.phase + 1]}</h3>
+              <h3>
+                Phase {state.phase + 1} opens at {Math.round(state.phaseGate * 100)}%
+                {state.week.pct >= state.phaseGate * 100 ? ' — clear as it stands' : ''}
+              </h3>
               <p>
-                It unlocks on time, not on performance — you cannot open it early by having
-                a good week. The lock is protecting you from enthusiasm, not punishing you
-                for slipping.
+                Week {state.weeksInPhase + 1} of phase {state.phase}. You cannot open the next
+                one early by having a good week — the lock is there to stop everything starting
+                at once. But an under-gate week holds it, and after{' '}
+                {state.holdsLeft === 0 ? 'this one' : `${state.holdsLeft} more`} it opens
+                regardless. It can hold you back; it cannot strand you.
+              </p>
+            </div>
+          )}
+
+          {state.shelfLockedUntil && (
+            <div className="panel note">
+              <h3>Shelf locked</h3>
+              <p>
+                Last week came in under 80%, so spending is paused until Monday. Points keep
+                banking as normal — nothing is lost, it just waits.
               </p>
             </div>
           )}

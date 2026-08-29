@@ -3,7 +3,10 @@
  * here is a function of its arguments, which is why it is the part with tests.
  */
 
-import { LADDER, LADDER_DOWN_AFTER, LADDER_UP_AFTER, PROJECT_MODE_CAP, WEEK_TARGET, WEEK_VALVE_AFTER } from './config.js'
+import {
+  LADDER, LADDER_DOWN_AFTER, LADDER_UP_AFTER, PHASE_GATE, PHASE_MAX_WEEKS,
+  PROJECT_MODE_CAP, WEEK_TARGET, WEEK_VALVE_AFTER,
+} from './config.js'
 import type { Topic } from './config.js'
 
 /**
@@ -55,6 +58,37 @@ export function valveCandidates<T extends { points: number; spine: boolean; week
     .filter((h) => h.active && !h.spine && !h.weekly && h.phase <= phase)
     .sort((a, b) => a.points - b.points)
     .slice(0, limit)
+}
+
+/**
+ * Whether the closing week opens the next phase, and why.
+ *
+ * `earned` — the week cleared PHASE_GATE.
+ * `elapsed` — held back the maximum number of times; it opens anyway.
+ * `held` — under the gate, with holds left.
+ *
+ * `weeksInPhase` counts the week that just closed, so it is 1 on the first
+ * rollover after a phase opens.
+ */
+export type Advance = { advance: boolean; reason: 'earned' | 'elapsed' | 'held' }
+
+export function shouldAdvance(pct: number, weeksInPhase: number): Advance {
+  if (pct >= PHASE_GATE * 100) return { advance: true, reason: 'earned' }
+  if (weeksInPhase >= PHASE_MAX_WEEKS) return { advance: true, reason: 'elapsed' }
+  return { advance: false, reason: 'held' }
+}
+
+/** Holds left in this phase before it opens regardless. */
+export function holdsLeft(weeksInPhase: number): number {
+  return Math.max(0, PHASE_MAX_WEEKS - weeksInPhase)
+}
+
+/**
+ * Whether the closing week locks the shelf for the next one. Uses WEEK_TARGET,
+ * not PHASE_GATE — a week can open the next phase and still not have counted.
+ */
+export function shelfLocks(pct: number): boolean {
+  return pct < WEEK_TARGET * 100
 }
 
 /**

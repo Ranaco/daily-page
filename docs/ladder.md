@@ -4,7 +4,7 @@
 repo — the highest-friction habit in the plan pointing at a document that did not
 exist. This is the document.
 
-It runs Tuesday and Thursday, 7pm, and it is worth 5 points, which is the same as
+It opens in phase 4, runs Tuesday and Thursday at 7pm, and it is worth 5 points, which is the same as
 lights-out and more than reading. That is on purpose: it is the hardest thing in
 the week and the one with the least immediate reward.
 

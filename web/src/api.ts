@@ -22,6 +22,10 @@ export type AppState = {
   modes: Record<string, number>
   projectLeft: number
   rung: number
+  weeksInPhase: number
+  holdsLeft: number
+  phaseGate: number
+  shelfLockedUntil: string | null
   /** Hours since the last cron fired, or null if none ever has. */
   staleHours: number | null
   staleAfter: number

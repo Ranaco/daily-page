@@ -1,10 +1,12 @@
 import { and, eq, gte, inArray, lte, sql } from 'drizzle-orm'
 import { db, schema } from './db/client.js'
 import {
-  ALL_TOPICS, HABITS, MODES, REWARDS, STALE_TICK_HOURS, WEEK_TARGET,
-  XP_PER_LEVEL, phaseForWeek,
+  ALL_TOPICS, HABITS, MODES, REWARDS, SHELF_LOCK_ON_MISS, STALE_TICK_HOURS,
+  PHASE_GATE, WEEK_TARGET, XP_PER_LEVEL, phaseForWeek,
 } from './config.js'
-import { ladderRung, modeSpread, pickTopic, projectModeLeft } from './plan.js'
+import {
+  holdsLeft, ladderRung, modeSpread, pickTopic, projectModeLeft, shelfLocks, shouldAdvance,
+} from './plan.js'
 import { addDays, dayOfWeek, logicalDay, weekDays, weekIndex, weekStart } from './time.js'
 
 const { habits, checkins, claims, notes, settings, topics, modes } = schema
@@ -44,10 +46,69 @@ export async function startedOn(): Promise<string> {
   return today
 }
 
+/**
+ * The current phase is now STORED, not derived from the calendar — progression
+ * is earned at each week rollover (see advancePhase). The date-based clock is
+ * only the seed for the very first read, so an existing run keeps the phase it
+ * had rather than snapping back to 1.
+ */
 export async function currentPhase(day = logicalDay()): Promise<1 | 2 | 3 | 4> {
   const forced = await getSetting('phase_override')
   if (forced) return Number(forced) as 1 | 2 | 3 | 4
-  return phaseForWeek(weekIndex(await startedOn(), day))
+
+  const stored = await getSetting('phase')
+  if (stored) return Number(stored) as 1 | 2 | 3 | 4
+
+  const seeded = phaseForWeek(weekIndex(await startedOn(), day))
+  await setSetting('phase', String(seeded))
+  await setSetting('weeks_in_phase', '0')
+  return seeded
+}
+
+/** Weeks of this phase already closed. 0 for a phase that has not closed one. */
+export async function weeksInPhase(): Promise<number> {
+  return Number((await getSetting('weeks_in_phase')) ?? '0')
+}
+
+/**
+ * Called once per week rollover, from the morning cron. Returns what happened
+ * so the bot can say it.
+ *
+ * The phase hold is the whole consequence of an under-gate week, and it is
+ * deliberately the only one that bites immediately — the shelf lock below does
+ * not start mattering until there is something on the shelf worth withholding.
+ */
+export async function advancePhase(closingPct: number) {
+  const phase = await currentPhase()
+  const closed = (await weeksInPhase()) + 1
+  const verdict = shouldAdvance(closingPct, closed)
+
+  if (!verdict.advance) {
+    await setSetting('weeks_in_phase', String(closed))
+    return { ...verdict, phase, from: phase, weeksInPhase: closed, holds: holdsLeft(closed) }
+  }
+
+  const next = Math.min(4, phase + 1) as 1 | 2 | 3 | 4
+  await setSetting('phase', String(next))
+  await setSetting('weeks_in_phase', '0')
+  return { ...verdict, phase: next, from: phase, weeksInPhase: 0, holds: holdsLeft(0) }
+}
+
+// ------------------------------------------------------------- shelf lock
+
+/**
+ * An under-target week locks the shelf for the next one. Stored as the last day
+ * it stays locked, so it expires on its own and no job has to unlock it.
+ */
+export async function lockShelfFor(wkStart: string) {
+  if (!SHELF_LOCK_ON_MISS) return
+  await setSetting('shelf_locked_until', addDays(wkStart, 6))
+}
+
+export async function shelfLockedUntil(today: string): Promise<string | null> {
+  const until = await getSetting('shelf_locked_until')
+  if (!until || until < today) return null
+  return until
 }
 
 // ------------------------------------------------------------------ habits
@@ -151,6 +212,33 @@ export async function missedTwice(today: string): Promise<HabitRow[]> {
   return scheduledOn(all, y, phase).filter((h) => !dy.has(h.id) && !dyy.has(h.id))
 }
 
+/**
+ * Weekly habits, scored.
+ *
+ * They were previously left out of the week percentage entirely, which made the
+ * Saturday talk — six points, the single highest-value habit — worth nothing
+ * toward the score. Harmless while the score was decoration; not harmless now
+ * that it gates the next phase.
+ *
+ * Available on the weekday named in `days` and only once it has elapsed, so an
+ * unstarted Saturday does not depress Tuesday. Banked if ticked anywhere in the
+ * week, since "once this week" is what weekly means.
+ */
+export function weeklyScore(
+  all: HabitRow[], phase: number, days: string[], today: string,
+  ticks: Map<string, Set<string>>,
+): { available: number; banked: number } {
+  let available = 0, banked = 0
+  for (const h of all) {
+    if (!h.active || !h.weekly || h.phase > phase) continue
+    const due = days.filter((d) => d <= today && (!h.days || h.days.includes(dayOfWeek(d))))
+    if (!due.length) continue
+    available += h.points
+    if (days.some((d) => ticks.get(d)?.has(h.id))) banked += h.points
+  }
+  return { available, banked }
+}
+
 // ------------------------------------------------------------- whole state
 
 export async function getState(today = logicalDay()) {
@@ -158,8 +246,9 @@ export async function getState(today = logicalDay()) {
     allHabits(), currentPhase(today), startedOn(), lifetimePoints(), spentPoints(),
   ])
   const wk = weekStart(today)
-  const [topic, mode, weekModes, staleHours, rung] = await Promise.all([
+  const [topic, mode, weekModes, staleHours, rung, inPhase, shelfLock] = await Promise.all([
     weekTopic(wk), modeFor(today), modesInWeek(wk), tickAgeHours(), currentRung(today),
+    weeksInPhase(), shelfLockedUntil(today),
   ])
 
   const wkStart = weekStart(today)
@@ -188,10 +277,12 @@ export async function getState(today = logicalDay()) {
       return { habit: h, locked, cells, earned }
     })
 
+  const wkly = weeklyScore(all, phase, days, today, ticks)
   const available = grid
     .filter((g) => !g.locked)
     .reduce((n, g) => n + g.cells.filter((c) => c !== 'locked' && c !== 'future').length * g.habit.points, 0)
-  const banked = grid.reduce((n, g) => n + g.earned, 0)
+    + wkly.available
+  const banked = grid.reduce((n, g) => n + g.earned, 0) + wkly.banked
 
   const claimed = await db().select().from(claims)
   const claimedIds = new Set(claimed.map((c) => c.rewardId))
@@ -207,6 +298,10 @@ export async function getState(today = logicalDay()) {
     modes: modeSpread(weekModes, MODES.map((m) => m.id)),
     projectLeft: projectModeLeft(weekModes),
     rung,
+    weeksInPhase: inPhase,
+    holdsLeft: holdsLeft(inPhase + 1),
+    phaseGate: PHASE_GATE,
+    shelfLockedUntil: shelfLock,
     staleHours,
     staleAfter: STALE_TICK_HOURS,
     startedOn: started,
@@ -227,7 +322,11 @@ export async function getState(today = logicalDay()) {
       pct: available ? Math.round((banked / available) * 100) : 0,
       counts: available ? banked / available >= WEEK_TARGET : false,
     },
-    rewards: REWARDS.map((r) => ({ ...r, claimed: claimedIds.has(r.id), affordable: bank >= r.cost })),
+    rewards: REWARDS.map((r) => ({
+      ...r,
+      claimed: claimedIds.has(r.id),
+      affordable: bank >= r.cost && !shelfLock,
+    })),
   }
 }
 
@@ -235,11 +334,16 @@ export type AppState = Awaited<ReturnType<typeof getState>>
 
 // ------------------------------------------------------------------ claims
 
-export async function claimReward(rewardId: string) {
+export async function claimReward(rewardId: string, today = logicalDay()) {
   const reward = REWARDS.find((r) => r.id === rewardId)
   if (!reward) throw new Error('unknown reward')
+
+  const locked = await shelfLockedUntil(today)
+  if (locked) return { ok: false as const, locked }
+
   const bank = (await lifetimePoints()) - (await spentPoints())
   if (bank < reward.cost) return { ok: false as const, short: reward.cost - bank }
+
   await db().insert(claims).values({ rewardId: reward.id, name: reward.name, cost: reward.cost })
   return { ok: true as const, reward }
 }
@@ -394,6 +498,9 @@ async function weekPct(day: string): Promise<number> {
       if (ticks.get(d)?.has(h.id)) banked += h.points
     }
   }
+  const wkly = weeklyScore(all, phase, days, day, ticks)
+  available += wkly.available
+  banked += wkly.banked
   return available ? Math.round((banked / available) * 100) : 100
 }
 

@@ -33,7 +33,11 @@ export type Habit = {
   sub: string
   points: number
   spine: boolean
-  /** Weekly habits are scored once per week, not once per day. */
+  /**
+   * Scored once per week rather than once per day. A weekly habit still needs
+   * `days`: that is the day it becomes AVAILABLE in the week's denominator, so
+   * a Saturday habit does not drag Tuesday's percentage down.
+   */
   weekly?: boolean
   /** 0 = Sun … 6 = Sat. Omit for every day. */
   days?: number[]
@@ -95,13 +99,13 @@ export const HABITS: Habit[] = [
     days: [2, 4],
     label: 'Social rung',           sub: 'The current rung. /ladder to see it. Tue and Thu.' },
   { id: 'place',  phase: 4, time: 'Sat',      slot: 'morning', points: 3, spine: false,
-    weekly: true,
+    weekly: true, days: [6],
     label: 'One new place',         sub: 'Somewhere in the city you have never been.' },
   { id: 'home',   phase: 4, time: 'Sun',      slot: 'lunch',   points: 3, spine: false,
-    weekly: true,
+    weekly: true, days: [0],
     label: 'Call home',             sub: 'Parents, siblings. Voice, not text.' },
   { id: 'review', phase: 4, time: 'Sun',      slot: 'draw',    points: 3, spine: false,
-    weekly: true,
+    weekly: true, days: [0],
     label: 'The Sunday hour',       sub: 'Read the grid and the notes. Change one thing. Then stop.' },
 ]
 
@@ -392,14 +396,12 @@ export const REWARDS = [
 ]
 
 /**
- * Phases unlock on elapsed time, never on performance. This is deliberate:
- * the failure mode being guarded against is starting everything at once,
- * and "I had a great week so I'll add five habits" is exactly that failure
- * wearing a reward hat.
+ * The fallback phase clock: one week per phase. Used only to seed the stored
+ * phase on first read — after that, progression is earned (see PHASE_GATE).
  *
- * One week per phase, so the full set is live by week 4. What makes that
- * acceptable rather than reckless is the pair of relief valves — missedTwice()
- * at the habit level and the week valve at the aggregate level.
+ * Phases must never unlock EARLY on performance: "I had a great week so I'll
+ * add five habits" is starting everything at once wearing a reward hat. Being
+ * held BACK is the opposite move, and is what the gate below does.
  */
 export function phaseForWeek(weekIndex: number): 1 | 2 | 3 | 4 {
   if (weekIndex < 1) return 1
@@ -410,6 +412,43 @@ export function phaseForWeek(weekIndex: number): 1 | 2 | 3 | 4 {
 
 /** A week counts if you bank at least this share of the points available. */
 export const WEEK_TARGET = 0.8
+
+/**
+ * The share needed to open the next phase. Deliberately BELOW WEEK_TARGET.
+ *
+ * At 80% the slack is 1.4 days of total collapse per week, in every phase:
+ *
+ *   phase 1  105 pts/wk   slack@80% = 21 (1.4 days)   slack@70% = 31 (2.1 days)
+ *   phase 2  238 pts/wk   slack@80% = 47 (1.4 days)   slack@70% = 71 (2.1 days)
+ *   phase 3  328 pts/wk   slack@80% = 65 (1.4 days)   slack@70% = 98 (2.1 days)
+ *   phase 4  347 pts/wk   slack@80% = 69 (1.5 days)   slack@70% = 104 (2.3 days)
+ *
+ * Gating at 80% keys progression to a single wrecked weekend — which is, right
+ * now, the most broken part of the week. Two lines doing two different jobs:
+ * 80% is whether the week counted, 70% is whether the next phase opens.
+ */
+export const PHASE_GATE = 0.7
+
+/**
+ * Weeks in one phase before it opens regardless. The gate can hold you back
+ * twice; it cannot strand you.
+ *
+ * Without this, the habits aimed at the actual complaint — the ladder, new
+ * places, the talk, calling home — sit in phases 3 and 4 and become the least
+ * reachable things in the plan. And a repeated phase means the same handful of
+ * habits for a month, which is the monotony this is meant to break.
+ */
+export const PHASE_MAX_WEEKS = 3
+
+/**
+ * An under-target week locks the reward shelf for the following week.
+ *
+ * The phase hold is the consequence that bites immediately; this is the one
+ * that starts mattering later, once the phases have all opened and there is
+ * nothing left to withhold. Nothing here scolds — messages.ts forbids
+ * expressing disappointment, and that rule stands. Costs, not shame.
+ */
+export const SHELF_LOCK_ON_MISS = true
 
 /**
  * Consecutive under-target weeks before the bot offers to shrink the load.

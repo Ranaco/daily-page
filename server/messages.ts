@@ -11,7 +11,7 @@
 import type { AppState } from './store.js'
 import type { HabitRow, TopicRow } from './store.js'
 import type { Button } from './telegram.js'
-import { LADDER, MODES, TALK } from './config.js'
+import { LADDER, MODES, PHASE_GATE, PHASE_MAX_WEEKS, TALK, WEEK_TARGET } from './config.js'
 import { rungText } from './plan.js'
 import { esc } from './telegram.js'
 import { prettyDay } from './time.js'
@@ -121,10 +121,49 @@ export function levelUp(level: number) {
   return `<b>Level ${level}.</b> That's ${level * 100} points of days that mostly felt like nothing. They added up anyway.`
 }
 
-export function weekClosed(state: AppState) {
-  return state.week.counts
-    ? `<b>Week ${state.weekIndex + 1} counts.</b> ${state.week.banked}/${state.week.available} — ${state.week.pct}%.`
-    : `Week ${state.weekIndex + 1} came in at ${state.week.pct}%. Under the line, and that's all it is — the next one starts clean.`
+/**
+ * The week's result and its consequences, stated as facts.
+ *
+ * The house rule at the top of this file still holds: no disappointment, no
+ * zeroing out. A cost is not a scolding — say what happened and what follows,
+ * then stop. Every sentence here should be readable at 07:00 without flinching.
+ */
+export function weekClosed(state: AppState, held: { advance: boolean; reason: string; from: number; holds: number }) {
+  const lines = [
+    state.week.counts
+      ? `<b>Week ${state.weekIndex + 1} counts.</b> ${state.week.banked}/${state.week.available} — ${state.week.pct}%.`
+      : `<b>Week ${state.weekIndex + 1}: ${state.week.pct}%.</b> ${state.week.banked}/${state.week.available}, against ${Math.round(WEEK_TARGET * 100)}%.`,
+  ]
+
+  if (!state.week.counts) {
+    lines.push('', `The shelf is locked until Sunday. Points still bank — you just cannot spend them this week.`)
+  }
+
+  if (held.advance && held.reason === 'earned') {
+    lines.push('', `Phase ${held.from} cleared at the gate. Phase ${held.from + 1} opens today.`)
+  } else if (held.advance && held.reason === 'elapsed') {
+    lines.push('', `Third week in phase ${held.from}, so it opens anyway. That was always the deal — the gate can hold you back, it cannot strand you.`)
+  } else {
+    lines.push(
+      '',
+      `<b>Phase ${held.from} stays.</b> The gate is ${Math.round(PHASE_GATE * 100)}% and this week came in under it.`,
+      held.holds === 1
+        ? 'One more held week and it opens regardless.'
+        : `${held.holds} held weeks left before it opens regardless.`,
+      '',
+      'Same habits, one more run at them. Nothing new arrives on top.',
+    )
+  }
+
+  return lines.join('\n')
+}
+
+export function shelfLocked(until: string) {
+  return [
+    `<b>Shelf locked until ${esc(prettyDay(until))}.</b>`,
+    '',
+    `Last week came in under ${Math.round(WEEK_TARGET * 100)}%. Points keep banking; spending resumes Monday.`,
+  ].join('\n')
 }
 
 export function phaseUnlocked(phase: number, names: string[]) {
@@ -138,6 +177,8 @@ export function phaseUnlocked(phase: number, names: string[]) {
     ...names.map((n) => `· ${esc(n)}`),
     '',
     'Keep the old ones running. These are additions, not replacements.',
+    '',
+    `<i>Earned it, or ran out of holds — either way it is open. ${PHASE_MAX_WEEKS} weeks maximum per phase.</i>`,
   ].join('\n')
 }
 
@@ -196,18 +237,26 @@ export function moodSaved(n: number) {
 
 export function status(state: AppState) {
   const bar = (pct: number) => '█'.repeat(Math.round(pct / 10)) + '░'.repeat(10 - Math.round(pct / 10))
+  const gate = Math.round(state.phaseGate * 100)
   return [
     `<b>Level ${state.level}</b> · ${state.into}/${state.per} XP`,
     `${bar(Math.round((state.into / state.per) * 100))}`,
     '',
     `Week ${state.weekIndex + 1} · Phase ${state.phase}`,
-    `${state.week.banked}/${state.week.available} points — ${state.week.pct}% (counts at 80%)`,
+    `${state.week.banked}/${state.week.available} points — ${state.week.pct}%`,
+    `${Math.round(WEEK_TARGET * 100)}% and the week counts · ${gate}% and phase ${Math.min(4, state.phase + 1)} opens`,
+    state.phase < 4
+      ? `Week ${state.weeksInPhase + 1} of phase ${state.phase} · ${state.holdsLeft} hold${state.holdsLeft === 1 ? '' : 's'} left`
+      : 'Phase 4 — everything is open.',
     '',
-    `<b>${state.bank}</b> points to spend`,
+    state.shelfLockedUntil
+      ? `<b>${state.bank}</b> points banked · shelf locked until ${esc(prettyDay(state.shelfLockedUntil))}`
+      : `<b>${state.bank}</b> points to spend`,
   ].join('\n')
 }
 
 export function shelf(state: AppState) {
+  if (state.shelfLockedUntil) return { text: shelfLocked(state.shelfLockedUntil), rows: [] as Button[][] }
   const rows: Button[][] = state.rewards
     .filter((r) => !r.claimed)
     .map((r) => [{
