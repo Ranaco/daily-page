@@ -150,6 +150,19 @@ openssl rand -hex 24        # or: node -e "console.log(crypto.randomUUID().repla
 This pushes the env vars, deploys, registers the Telegram webhook, and verifies
 itself. It is idempotent — re-run it after any change.
 
+> **Commit with an email GitHub knows, or the deploy is blocked.** Vercel's GitHub
+> integration refuses any commit whose committer it cannot map to a GitHub user:
+> *"The Deployment was blocked because GitHub could not associate the committer
+> with a GitHub user."* It is not a code error and retrying does not help — the
+> only fix is a new commit with a linked identity. `86058409+Ranaco@users.noreply.github.com`
+> always associates:
+>
+> ```bash
+> git config user.email "86058409+Ranaco@users.noreply.github.com"
+> ```
+>
+> Or add the address you do commit with to github.com/settings/emails.
+
 > **Why it sets env vars through the REST API rather than `vercel env add`:**
 > piping a string to a native command's stdin in Windows PowerShell 5.1 prepends
 > a UTF-8 BOM, so every value lands one invisible character too long. An
