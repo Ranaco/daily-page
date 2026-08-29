@@ -6,7 +6,7 @@ import { MODES } from '../server/config.js'
 import { projectModeLeft } from '../server/plan.js'
 import { logicalDay, weekStart } from '../server/time.js'
 import {
-  addEntry, allHabits, attachEntry, claimReward, currentRung, getSetting, getState,
+  addEntry, allHabits, attachEntry, claimReward, entriesOn, currentRung, getSetting, getState,
   levelFor, lifetimePoints, modesInWeek, pauseHabit, saveMood, saveNote, setMode,
   setSetting, setTalkStage, shrinkHabit, talkStage, toggle, weekTopic,
 } from '../server/store.js'
@@ -193,6 +193,11 @@ async function onText(msg: any) {
         data: m.id === 'project' && left === 0 ? 'noop' : `mode:${m.id}`,
       }])
       return send('<b>The first hour.</b> Which one today?', rows)
+    }
+
+    case '/journal': {
+      const items = await entriesOn(state.today)
+      return send(M.journalToday(items, state.today))
     }
 
     case '/proof':

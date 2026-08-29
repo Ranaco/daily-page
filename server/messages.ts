@@ -488,3 +488,30 @@ export function attachedTo(kind: string, label: string): string {
   const word = (KIND_WORD[kind] ?? 'File').toLowerCase()
   return `Filed that ${word} against <b>${esc(label)}</b>.`
 }
+
+/** /journal — what has been filed today, without opening the site. */
+export function journalToday(
+  items: { kind: string; caption: string | null; habitId: string | null }[],
+  day: string,
+): string {
+  if (!items.length) {
+    return [
+      `<b>Nothing filed for ${esc(prettyDay(day))}.</b>`,
+      '',
+      'Send a photo, video or voice note and it lands here. /proof picks the task first.',
+    ].join('\n')
+  }
+  const lines = items.map((i) => {
+    const word = (KIND_WORD[i.kind] ?? 'Entry')
+    const tail = i.caption ? ` — ${esc(i.caption.slice(0, 60))}${i.caption.length > 60 ? '…' : ''}` : ''
+    const tag = i.habitId ? ` <i>[${esc(i.habitId)}]</i>` : ''
+    return `· ${word}${tag}${tail}`
+  })
+  return [
+    `<b>${esc(prettyDay(day))}</b> — ${items.length} filed`,
+    '',
+    ...lines,
+    '',
+    'daily.ranax.co → Journal for the full month.',
+  ].join('\n')
+}
