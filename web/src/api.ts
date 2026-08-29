@@ -12,9 +12,19 @@ export type GridRow = {
   earned: number
 }
 
+export type Topic = { id: string; domain: string; text: string }
+
 export type AppState = {
   today: string; weekStart: string; days: string[]
   phase: number; weekIndex: number
+  topic: Topic | null
+  mode: string | null
+  modes: Record<string, number>
+  projectLeft: number
+  rung: number
+  /** Hours since the last cron fired, or null if none ever has. */
+  staleHours: number | null
+  staleAfter: number
   xp: number; bank: number; level: number; into: number; per: number
   tasks: Task[]
   weekly: (Task & { weekly: boolean })[]

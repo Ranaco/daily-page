@@ -1,9 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import * as M from '../../server/messages.js'
 import { send } from '../../server/telegram.js'
-import { addDays, logicalDay, weekStart } from '../../server/time.js'
+import { WEEK_VALVE_AFTER } from '../../server/config.js'
+import { valveCandidates, weekValveTripped } from '../../server/plan.js'
+import { addDays, dayOfWeek, logicalDay, weekStart } from '../../server/time.js'
 import {
-  allHabits, currentPhase, getSetting, getState, habitsBySlot, missedTwice, setSetting,
+  allHabits, closedWeekPcts, currentPhase, getSetting, getState, habitsBySlot,
+  markTick, missedTwice, setSetting, talkStage, weekTopic,
 } from '../../server/store.js'
 
 export const config = { maxDuration: 30 }
@@ -27,6 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const today = logicalDay()
 
   try {
+    await markTick()
     if (slot === 'morning') await morning(today)
     else if (slot === 'lunch') await nudge(today, 'lunch', M.lunch)
     else if (slot === 'midday') await nudge(today, 'midday', M.midday)
@@ -61,6 +65,7 @@ async function nudge(
 
 async function morning(today: string) {
   await announceWeekAndPhase(today)
+  await maybeStartTalk(today)
 
   const state = await getState(today)
   const due = (await habitsBySlot('morning', today)).filter(
@@ -78,10 +83,42 @@ async function morning(today: string) {
   }
 }
 
+/**
+ * Saturday's topic is handed out from the morning push rather than its own cron
+ * job — one fewer thing to wire at the scheduler, and the stages then advance on
+ * button taps, so the whole thing works whenever you start rather than only at
+ * the minute a cron fires.
+ */
+async function maybeStartTalk(today: string) {
+  if (dayOfWeek(today) !== 6) return
+  const wk = weekStart(today)
+  const row = (await allHabits()).find((h) => h.id === 'talk')
+  if (!row?.active || row.phase > (await currentPhase(today))) return
+  if ((await talkStage(wk)) > 0) return
+
+  const topic = await weekTopic(wk, true)
+  if (!topic) return
+  const { text, rows } = M.talkStart(topic)
+  await send(text, rows)
+}
+
 async function wrap(today: string) {
   const state = await getState(today)
   const remaining = state.tasks.filter((t) => !t.done)
   const { text, rows } = M.evening(state, remaining as any)
+  await send(text, rows)
+}
+
+/**
+ * The aggregate valve, checked once at week rollover. Two closed weeks under
+ * target and the bot offers to shed the cheapest non-spine habits.
+ */
+async function maybeWeekValve(today: string) {
+  const pcts = await closedWeekPcts(today, WEEK_VALVE_AFTER)
+  if (pcts.length < WEEK_VALVE_AFTER || !weekValveTripped(pcts)) return
+  const candidates = valveCandidates(await allHabits(), await currentPhase(today))
+  if (!candidates.length) return
+  const { text, rows } = M.weekValve(pcts, candidates)
   await send(text, rows)
 }
 
@@ -96,6 +133,7 @@ async function announceWeekAndPhase(today: string) {
   if (lastAnnounced && lastAnnounced !== thisWeek) {
     const closing = await getState(addDays(thisWeek, -1))
     await send(M.weekClosed(closing))
+    await maybeWeekValve(today)
   }
 
   if (lastAnnounced !== thisWeek) {

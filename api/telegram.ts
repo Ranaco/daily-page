@@ -2,10 +2,13 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import * as M from '../server/messages.js'
 import { gridText } from '../server/grid.js'
 import { answer, edit, ownerId, send } from '../server/telegram.js'
-import { logicalDay } from '../server/time.js'
+import { MODES } from '../server/config.js'
+import { projectModeLeft } from '../server/plan.js'
+import { logicalDay, weekStart } from '../server/time.js'
 import {
-  allHabits, claimReward, getSetting, getState, levelFor, lifetimePoints,
-  pauseHabit, saveNote, setSetting, shrinkHabit, toggle,
+  allHabits, claimReward, currentRung, getSetting, getState, levelFor, lifetimePoints,
+  modesInWeek, pauseHabit, saveMood, saveNote, setMode, setSetting, setTalkStage,
+  shrinkHabit, talkStage, toggle, weekTopic,
 } from '../server/store.js'
 import { db, schema } from '../server/db/client.js'
 import { eq } from 'drizzle-orm'
@@ -51,6 +54,16 @@ async function onText(msg: any) {
       await saveNote(day, text)
       await setSetting('pending', '')
       await send(M.noteSaved(day))
+      const { text: mt, rows } = M.moodPrompt(day)
+      await send(mt, rows)
+      return
+    }
+    if (pending?.startsWith('talkline:')) {
+      const day = pending.slice(9)
+      await setSetting(`talk_line:${weekStart(day)}`, text)
+      await setSetting('pending', '')
+      const { text: dt, rows } = M.talkDone(day)
+      await send(dt, rows)
       return
     }
     return send(M.help)
@@ -85,6 +98,30 @@ async function onText(msg: any) {
     case '/note':
       await setSetting('pending', `note:${state.today}`)
       return send(M.notePrompt)
+
+    case '/topic': {
+      const wk = weekStart(state.today)
+      const topic = await weekTopic(wk)
+      if (!topic) return send('No topic yet. It is handed out with Saturday morning\'s push.')
+      const stage = await talkStage(wk)
+      const msg = stage === 0 ? M.talkStart(topic)
+        : stage === 1 ? M.talkWrite(topic)
+        : stage === 2 ? M.talkSpeak(topic)
+        : M.talkDone(state.today)
+      return send(msg.text, msg.rows)
+    }
+
+    case '/ladder':
+      return send(M.ladder(await currentRung(state.today)))
+
+    case '/mode': {
+      const left = projectModeLeft(await modesInWeek(weekStart(state.today)))
+      const rows = MODES.map((m) => [{
+        text: m.id === 'project' && left === 0 ? `${m.label} · used up` : m.label,
+        data: m.id === 'project' && left === 0 ? 'noop' : `mode:${m.id}`,
+      }])
+      return send('<b>The first hour.</b> Which one today?', rows)
+    }
 
     case '/habits': {
       const all = await allHabits()
@@ -164,6 +201,48 @@ async function onCallback(cq: any) {
   if (kind === 'unpause' && a) {
     await db().update(schema.habits).set({ active: true }).where(eq(schema.habits.id, a))
     return answer(cq.id, 'Back on')
+  }
+
+  if (kind === 'mode' && a) {
+    const day = logicalDay()
+    await setMode(day, a)
+    const left = projectModeLeft(await modesInWeek(weekStart(day)))
+    await answer(cq.id, 'Set')
+    return send(M.modeSet(a, left))
+  }
+
+  if (kind === 'mood' && a && b) {
+    const n = Number(b)
+    if (!Number.isInteger(n) || n < 1 || n > 5) return answer(cq.id)
+    await saveMood(a, n)
+    await answer(cq.id, String(n))
+    return send(M.moodSaved(n))
+  }
+
+  /**
+   * The Saturday talk advances one stage per tap. `a` is the stage just
+   * finished, so a stale button cannot skip ahead or rewind.
+   */
+  if (kind === 'talk' && a) {
+    const wk = weekStart(logicalDay())
+    const topic = await weekTopic(wk)
+    if (!topic) return answer(cq.id, 'No topic this week.')
+    const done = Number(a)
+    const at = await talkStage(wk)
+    if (done !== at + 1) return answer(cq.id, 'Already past that.')
+    await setTalkStage(wk, done)
+    await answer(cq.id, 'Next')
+
+    if (done === 1) {
+      const { text, rows } = M.talkWrite(topic)
+      return send(text, rows)
+    }
+    if (done === 2) {
+      const { text, rows } = M.talkSpeak(topic)
+      return send(text, rows)
+    }
+    await setSetting('pending', `talkline:${logicalDay()}`)
+    return send(M.talkLine)
   }
 
   if (kind === 'note' && a) {

@@ -116,6 +116,26 @@ export default function App() {
             ))}
           </div>
 
+          {state.staleHours !== null && state.staleHours > state.staleAfter && (
+            <div className="panel note">
+              <h3>The bot has not been pushed in {Math.round(state.staleHours)} hours</h3>
+              <p>
+                That is the scheduler, not you. Check the three jobs at cron-job.org before
+                reading the gaps in this grid as your own.
+              </p>
+            </div>
+          )}
+
+          {state.topic && (
+            <div className="panel note">
+              <h3>Saturday · {state.topic.text}</h3>
+              <p>
+                {state.topic.domain} — ten minutes reading, five writing by hand, then two
+                minutes to camera. No AI at any stage.
+              </p>
+            </div>
+          )}
+
           {state.weekly.length > 0 && (
             <>
               <h2 style={{ marginTop: 8 }}>This week</h2>

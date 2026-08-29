@@ -9,8 +9,10 @@
  */
 
 import type { AppState } from './store.js'
-import type { HabitRow } from './store.js'
+import type { HabitRow, TopicRow } from './store.js'
 import type { Button } from './telegram.js'
+import { LADDER, MODES, TALK } from './config.js'
+import { rungText } from './plan.js'
 import { esc } from './telegram.js'
 import { prettyDay } from './time.js'
 
@@ -31,10 +33,27 @@ export function morning(state: AppState, list: HabitRow[]) {
     ? `\n\nWeek's at ${streak}% so far. It counts at 80.`
     : ''
 
-  return {
-    text: `<b>${esc(head)}</b>${tail}`,
-    rows: list.map((h) => [tickBtn(h, state.today)]),
+  const rows: Button[][] = list.map((h) => [tickBtn(h, state.today)])
+
+  // The first hour needs a declared mode before it needs a tick.
+  if (list.some((h) => h.id === 'mine') && !state.mode) {
+    rows.unshift(...MODES.map((m) => [{
+      text: m.id === 'project' && state.projectLeft === 0 ? `${m.label} · used up` : m.label,
+      data: m.id === 'project' && state.projectLeft === 0 ? 'noop' : `mode:${m.id}`,
+    }]))
   }
+
+  return { text: `<b>${esc(head)}</b>${tail}`, rows }
+}
+
+/** The declared mode, and the one line that says what it means. */
+export function modeSet(modeId: string, projectLeft: number) {
+  const m = MODES.find((x) => x.id === modeId)
+  if (!m) return 'Noted.'
+  const tail = modeId === 'project'
+    ? `\n\n<i>${projectLeft} project morning${projectLeft === 1 ? '' : 's'} left this week.</i>`
+    : ''
+  return [`<b>${esc(m.label)}.</b>`, '', esc(m.prompt), tail].join('\n')
 }
 
 /**
@@ -110,7 +129,7 @@ export function weekClosed(state: AppState) {
 
 export function phaseUnlocked(phase: number, names: string[]) {
   const titles: Record<number, string> = {
-    2: 'The body', 3: 'The mind', 4: 'The world',
+    2: 'The clock, and her', 3: 'The body, and the voice', 4: 'The world',
   }
   return [
     `<b>Phase ${phase} — ${titles[phase] ?? ''}.</b>`,
@@ -160,6 +179,21 @@ export function noteSaved(day: string) {
   return `Logged for ${esc(prettyDay(day))}.`
 }
 
+/**
+ * Asked after the lines are saved, never as a fourth line. `felt` is prose and
+ * prose is not a series; this is the number you will actually plot in week ten.
+ */
+export function moodPrompt(day: string) {
+  return {
+    text: ['<b>One number.</b> Today, overall.', '', '<i>1 flat · 3 ordinary · 5 genuinely good</i>'].join('\n'),
+    rows: [[1, 2, 3, 4, 5].map((n) => ({ text: String(n), data: `mood:${day}:${n}` }))] as Button[][],
+  }
+}
+
+export function moodSaved(n: number) {
+  return `${n} logged. Nothing to do about it — it is just on the record now.`
+}
+
 export function status(state: AppState) {
   const bar = (pct: number) => '█'.repeat(Math.round(pct / 10)) + '░'.repeat(10 - Math.round(pct / 10))
   return [
@@ -187,6 +221,140 @@ export function claimed(name: string, left: number) {
   return `<b>Claimed: ${esc(name)}.</b> ${left} points left.\n\nGo and actually take it. An unclaimed reward teaches you the points are fake.`
 }
 
+// ------------------------------------------------------- the Saturday talk
+
+/**
+ * Stage 1 of three. Ten minutes of reading, and explicitly nothing written yet —
+ * transcribing while reading feels productive and trains nothing.
+ *
+ * There is no timer here and there cannot be: serverless has no way to wake
+ * itself up in ten minutes without another cron. The stages advance on button
+ * taps instead, which is better anyway — each tap is a commitment, and the whole
+ * thing works whenever you actually start rather than only at 11:00.
+ */
+export function talkStart(topic: TopicRow) {
+  return {
+    text: [
+      '<b>Saturday. Here is the topic.</b>',
+      '',
+      `<b>${esc(topic.text)}</b>`,
+      `<i>${esc(topic.domain)}</i>`,
+      '',
+      `<b>Stage 1 — ${TALK.readMinutes} minutes, screen on.</b>`,
+      'Read. Two or three sources. Websites are fine.',
+      '',
+      '<b>No AI. Not at any stage.</b> No model, no summariser, no explain-it-simply.',
+      'The struggle is the whole point — it is the exact thing that got automated',
+      'out of the rest of your week.',
+      '',
+      'Write nothing yet. Set a timer and tap when the ten minutes are up.',
+    ].join('\n'),
+    rows: [[{ text: `Read for ${TALK.readMinutes} min — done`, data: 'talk:1' }]] as Button[][],
+  }
+}
+
+export function talkWrite(topic: TopicRow) {
+  return {
+    text: [
+      '<b>Close the tabs. All of them.</b>',
+      '',
+      `<b>Stage 2 — ${TALK.writeMinutes} minutes, screen off.</b>`,
+      `Now write, by hand, in ${esc(TALK.notebook)}.`,
+      '',
+      '<b>From memory only.</b> Not a transcript — a reconstruction. What you cannot',
+      'remember is the part you did not actually learn, and finding that out is',
+      'the point of doing it this way round.',
+      '',
+      `<i>${esc(topic.text)}</i>`,
+    ].join('\n'),
+    rows: [[{ text: 'Notes written', data: 'talk:2' }]] as Button[][],
+  }
+}
+
+export function talkSpeak(topic: TopicRow) {
+  return {
+    text: [
+      '<b>Now say it.</b>',
+      '',
+      `<b>Stage 3 — ${TALK.speakMinutes} minutes minimum, one take.</b>`,
+      'From your notes, to camera. A second take makes it a reading exercise.',
+      '',
+      'Save it dated, in order, with the others. Nothing posted, nothing deleted —',
+      'in three months you will want to watch week one and hear the difference.',
+      '',
+      `<i>${esc(topic.text)}</i>`,
+      '',
+      'Ten minutes of reading gives you a shallow two minutes. That is correct.',
+      'The skill is being fluent on thin material, not being an expert.',
+    ].join('\n'),
+    rows: [[{ text: 'Recorded — tick it', data: 'talk:3' }]] as Button[][],
+  }
+}
+
+/**
+ * The talk is a weekly habit, so it never appears in a daily list — which means
+ * the only place it can be ticked is here, at the end of its own flow.
+ */
+export function talkDone(day: string) {
+  return {
+    text: [
+      '<b>On the record.</b>',
+      '',
+      'Notebook closed, video saved, one line typed from memory. That is the whole loop.',
+    ].join('\n'),
+    rows: [[{ text: 'Tick the talk · 6', data: `t:talk:${day}` }]] as Button[][],
+  }
+}
+
+export const talkLine = [
+  '<b>One line.</b> The single most interesting thing you learned.',
+  '',
+  '<i>Typed from memory, notebook closed. Second recall test of the day.</i>',
+].join('\n')
+
+// ------------------------------------------------------------- week valve
+
+/**
+ * The aggregate relief valve. missedTwice() only sees one habit missed on two
+ * consecutive days, so it is blind to the likelier failure: everything at 65%,
+ * scattered, nothing ever missed twice, nothing ever offered, the plan rotting
+ * politely. Same rules as every other push — offer smaller, never harder.
+ */
+export function weekValve(pcts: number[], candidates: HabitRow[]) {
+  return {
+    text: [
+      `<b>Two weeks under the line.</b> ${pcts.map((p) => `${p}%`).join(' then ')}.`,
+      '',
+      'Not a verdict — a load reading. Nothing here was missed twice in a row, which',
+      'means nothing is broken; there is just more of it than fits in your week.',
+      '',
+      'Drop the cheapest things until it fits. They come back with /habits.',
+    ].join('\n'),
+    rows: [
+      ...candidates.map((h) => [{ text: `Pause ${h.label} · ${h.points}`, data: `pause:${h.id}` }]),
+      [{ text: 'Leave it, the load is fine', data: 'noop' }],
+    ] as Button[][],
+  }
+}
+
+// ----------------------------------------------------------------- ladder
+
+export function ladder(rung: number) {
+  return [
+    `<b>Rung ${rung} of ${LADDER.length}.</b>`,
+    '',
+    `<b>${esc(rungText(rung))}</b>`,
+    '',
+    ...LADDER.map((l, i) => {
+      const n = i + 1
+      const mark = n < rung ? '·' : n === rung ? '→' : ' '
+      return `${mark} ${n}. ${esc(l)}`
+    }),
+    '',
+    '<i>Three clears move you up. Two misses move you down one. Rung 1 is the floor.</i>',
+  ].join('\n')
+}
+
 export const help = [
   '<b>The Daily Page</b>',
   '',
@@ -194,8 +362,12 @@ export const help = [
   '/week — the grid',
   '/status — level, points, week',
   '/rewards — spend points',
-  '/note — the three lines',
+  '/note — the three lines, then the number',
   '/habits — pause or restore habits',
+  '/topic — this week\'s talk, and where you are in it',
+  '/ladder — the social rungs',
+  '/mode — set or change the first hour',
   '',
-  'Three pushes a day: morning list, midday nudge, evening wrap. Nothing else.',
+  'Pushes: the morning list, a nudge before lunch, one after, the drawing block,',
+  'and the wrap after midnight. Silence the rest of the time.',
 ].join('\n')

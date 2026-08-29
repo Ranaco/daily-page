@@ -1,9 +1,13 @@
 import { and, eq, gte, inArray, lte, sql } from 'drizzle-orm'
 import { db, schema } from './db/client.js'
-import { HABITS, REWARDS, WEEK_TARGET, XP_PER_LEVEL, phaseForWeek } from './config.js'
+import {
+  ALL_TOPICS, HABITS, MODES, REWARDS, STALE_TICK_HOURS, WEEK_TARGET,
+  XP_PER_LEVEL, phaseForWeek,
+} from './config.js'
+import { ladderRung, modeSpread, pickTopic, projectModeLeft } from './plan.js'
 import { addDays, dayOfWeek, logicalDay, weekDays, weekIndex, weekStart } from './time.js'
 
-const { habits, checkins, claims, notes, settings } = schema
+const { habits, checkins, claims, notes, settings, topics, modes } = schema
 
 export type CellState = 'done' | 'forgiven' | 'miss' | 'future' | 'locked'
 
@@ -153,6 +157,10 @@ export async function getState(today = logicalDay()) {
   const [all, phase, started, xp, spent] = await Promise.all([
     allHabits(), currentPhase(today), startedOn(), lifetimePoints(), spentPoints(),
   ])
+  const wk = weekStart(today)
+  const [topic, mode, weekModes, staleHours, rung] = await Promise.all([
+    weekTopic(wk), modeFor(today), modesInWeek(wk), tickAgeHours(), currentRung(today),
+  ])
 
   const wkStart = weekStart(today)
   const days = weekDays(wkStart)
@@ -194,6 +202,13 @@ export async function getState(today = logicalDay()) {
     weekStart: wkStart,
     days,
     phase,
+    topic,
+    mode,
+    modes: modeSpread(weekModes, MODES.map((m) => m.id)),
+    projectLeft: projectModeLeft(weekModes),
+    rung,
+    staleHours,
+    staleAfter: STALE_TICK_HOURS,
     startedOn: started,
     weekIndex: weekIndex(started, today),
     xp,
@@ -253,4 +268,178 @@ export async function habitsBySlot(slot: string, day: string) {
   return scheduledOn(all, day, phase).filter((h) => h.slot === slot)
 }
 
-export { HABITS, REWARDS, inArray }
+// ------------------------------------------------------------------- mood
+
+/**
+ * The number is saved separately from the lines, and after them. Asking for
+ * four things in one message means a skipped mood loses the whole note.
+ */
+export async function saveMood(day: string, mood: number) {
+  await db().insert(notes).values({ day, mood })
+    .onConflictDoUpdate({ target: notes.day, set: { mood } })
+}
+
+export async function moodsSince(from: string): Promise<{ day: string; mood: number }[]> {
+  const rows = await db().select().from(notes).where(gte(notes.day, from))
+  return rows.filter((r) => r.mood != null).map((r) => ({ day: r.day, mood: r.mood! }))
+}
+
+// ----------------------------------------------------------------- topics
+
+/** Idempotent: inserts any topic from config that is not already in the table. */
+export async function seedTopics(): Promise<number> {
+  const existing = new Set((await db().select({ id: topics.id }).from(topics)).map((r) => r.id))
+  const missing = ALL_TOPICS.filter((t) => !existing.has(t.id))
+  for (let i = 0; i < missing.length; i += 200) {
+    await db().insert(topics).values(missing.slice(i, i + 200)).onConflictDoNothing()
+  }
+  return missing.length
+}
+
+export type TopicRow = { id: string; domain: string; text: string }
+
+/**
+ * This week's topic, assigned on first ask and then fixed. The assignment is
+ * recorded in settings as well as on the row so that asking twice in one week
+ * returns the same topic — there are no re-rolls, and an accidental second read
+ * must not become one.
+ */
+export async function weekTopic(wkStart: string, assign = false): Promise<TopicRow | null> {
+  const key = `topic:${wkStart}`
+  const existingId = await getSetting(key)
+  if (existingId) {
+    const [row] = await db().select().from(topics).where(eq(topics.id, existingId)).limit(1)
+    if (row) return { id: row.id, domain: row.domain, text: row.text }
+  }
+  if (!assign) return null
+
+  const pool = await db().select().from(topics)
+  if (!pool.length) return null
+  const used = new Set(pool.filter((r) => r.usedOn).map((r) => r.id))
+  const chosen = pickTopic(pool.map((r) => ({ id: r.id, domain: r.domain, text: r.text })), used)
+  if (!chosen) return null
+
+  await db().update(topics).set({ usedOn: wkStart }).where(eq(topics.id, chosen.id))
+  await setSetting(key, chosen.id)
+  return chosen
+}
+
+/** Stage of the Saturday talk: 0 not started, 1 reading, 2 writing, 3 recorded. */
+export async function talkStage(wkStart: string): Promise<number> {
+  return Number((await getSetting(`talk_stage:${wkStart}`)) ?? '0')
+}
+
+export async function setTalkStage(wkStart: string, stage: number) {
+  await setSetting(`talk_stage:${wkStart}`, String(stage))
+}
+
+// ------------------------------------------------------------------ modes
+
+export async function setMode(day: string, mode: string) {
+  await db().insert(modes).values({ day, mode })
+    .onConflictDoUpdate({ target: modes.day, set: { mode } })
+}
+
+export async function modeFor(day: string): Promise<string | null> {
+  const [row] = await db().select().from(modes).where(eq(modes.day, day)).limit(1)
+  return row?.mode ?? null
+}
+
+export async function modesInWeek(wkStart: string): Promise<string[]> {
+  const rows = await db().select().from(modes)
+    .where(and(gte(modes.day, wkStart), lte(modes.day, addDays(wkStart, 6))))
+  return rows.map((r) => r.mode)
+}
+
+// ------------------------------------------------------------- week valve
+
+/**
+ * Scores for the last `n` CLOSED weeks, oldest first.
+ *
+ * Only closed weeks: judging a week still in progress would trip the valve
+ * every Tuesday, when half the points have not been available yet.
+ */
+export async function closedWeekPcts(today: string, n: number): Promise<number[]> {
+  const started = await startedOn()
+  const out: number[] = []
+  for (let i = n; i >= 1; i--) {
+    // Last day of the i-th week back: Sunday before this week's Monday, minus weeks.
+    const end = addDays(weekStart(today), -1 - (i - 1) * 7)
+    if (weekStart(end) < weekStart(started)) continue
+    out.push(await weekPct(end))
+  }
+  return out
+}
+
+/** Banked share of available points for the week containing `day`. */
+async function weekPct(day: string): Promise<number> {
+  const [all, phase] = await Promise.all([allHabits(), currentPhase(day)])
+  const wkStart = weekStart(day)
+  const days = weekDays(wkStart)
+  const rows = await ticksBetween(addDays(wkStart, -1), days[6]!)
+
+  const ticks = new Map<string, Set<string>>()
+  for (const r of rows) {
+    if (!ticks.has(r.day)) ticks.set(r.day, new Set())
+    ticks.get(r.day)!.add(r.habitId)
+  }
+
+  let banked = 0, available = 0
+  for (const h of all) {
+    if (!h.active || h.weekly || h.phase > phase) continue
+    for (const d of days) {
+      if (d > day) continue
+      if (h.days && !h.days.includes(dayOfWeek(d))) continue
+      available += h.points
+      if (ticks.get(d)?.has(h.id)) banked += h.points
+    }
+  }
+  return available ? Math.round((banked / available) * 100) : 100
+}
+
+// ----------------------------------------------------------------- ladder
+
+/**
+ * Every past attempt at the social rung, oldest first: true if it was ticked.
+ * Derived from check-ins rather than stored, so it cannot drift out of step
+ * with what actually happened.
+ */
+export async function ladderResults(today: string): Promise<boolean[]> {
+  const [row] = await db().select().from(habits).where(eq(habits.id, 'rung')).limit(1)
+  if (!row) return []
+  const days: number[] = row.days ? JSON.parse(row.days) : [2, 4]
+  const started = await startedOn()
+  const done = new Set((await db().select().from(checkins)
+    .where(eq(checkins.habitId, 'rung'))).map((r) => r.day))
+
+  const out: boolean[] = []
+  for (let d = started; d < today; d = addDays(d, 1)) {
+    if (!days.includes(dayOfWeek(d))) continue
+    out.push(done.has(d))
+  }
+  return out
+}
+
+export async function currentRung(today: string): Promise<number> {
+  return ladderRung(await ladderResults(today))
+}
+
+// ------------------------------------------------------------- heartbeat
+
+/**
+ * The scheduler is a third party (cron-job.org) with no alarm of its own. If it
+ * silently stops, the bot goes quiet and silence reads as your own lapse rather
+ * than as an outage. Every tick stamps this; the website warns when it is old.
+ */
+export async function markTick() {
+  await setSetting('last_tick', new Date().toISOString())
+}
+
+export async function tickAgeHours(): Promise<number | null> {
+  const raw = await getSetting('last_tick')
+  if (!raw) return null
+  const age = (Date.now() - new Date(raw).getTime()) / 3600000
+  return Math.round(age * 10) / 10
+}
+
+export { HABITS, MODES, REWARDS, STALE_TICK_HOURS, inArray }

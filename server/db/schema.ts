@@ -33,12 +33,43 @@ export const checkins = pgTable('checkins', {
   at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({ oneADay: unique('checkins_habit_day').on(t.habitId, t.day) }))
 
-/** The three-line log. One row per logical day. */
+/**
+ * The three-line log, plus a number.
+ *
+ * `felt` is prose and prose is not queryable. In eight weeks the question worth
+ * answering is "is the flatness lifting", and that needs a series, not fifty
+ * paragraphs to re-read. 1 = flat, 5 = genuinely good. Nullable: the number is
+ * asked for after the lines are saved, and skipping it must not lose the lines.
+ */
 export const notes = pgTable('notes', {
   day: date('day').primaryKey(),
   happened: text('happened'),
   felt: text('felt'),
   tomorrow: text('tomorrow'),
+  mood: integer('mood'),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+/**
+ * The topic pool for the Saturday talk. Seeded from config.ts; `usedOn` is set
+ * when a topic is handed out, and nothing repeats until the pool is exhausted.
+ * There are no re-rolls, so this table is the only record of what was asked.
+ */
+export const topics = pgTable('topics', {
+  id: text('id').primaryKey(),
+  domain: text('domain').notNull(),
+  text: text('text').notNull(),
+  usedOn: date('used_on'),
+})
+
+/**
+ * Which mode the morning block ran in. One row per logical day, written when
+ * the mode is declared — so an undeclared morning is simply absent, and the
+ * weekly distribution is a group-by rather than a set of defaults.
+ */
+export const modes = pgTable('modes', {
+  day: date('day').primaryKey(),
+  mode: text('mode').notNull(),
   at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
 })
 

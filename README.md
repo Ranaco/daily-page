@@ -16,8 +16,98 @@ Single user. No accounts, no teams, no social features.
 | **The week is scored, not the day** | Hit 80% of available points and the week counts. One wrecked Tuesday gets absorbed instead of ending the run. |
 | **Points weighted by difficulty** | Waking at 7:15 is worth 5, ticking a box is worth 1. Flat scoring means farming the easy ones. |
 | **Points buy real things** | If points only buy a bigger number it's a spreadsheet. Once something is on the shelf, you don't buy it any other way. |
-| **Phases unlock on time, not performance** | Phase 2 opens in week 3 regardless of how week 1 went. The lock guards against starting everything at once, which is the actual failure mode. |
+| **Phases unlock on time, not performance** | Phase 2 opens in week 2 regardless of how week 1 went. The lock guards against starting everything at once, which is the actual failure mode. |
 | **XP never resets** | Its only job is to make eight weeks of unremarkable days visibly add up. |
+| **The first week gives, it does not take** | Phase 1 is the hour that belongs to you, a book and the sketchbook — and it does *not* move your wake time. The clock only moves in phase 2. See below. |
+| **Two bad weeks shrinks the load** | Never-miss-twice is blind to 65% every week with nothing missed twice. The week valve catches that and offers to drop the cheapest habits. |
+
+---
+
+## Why the phases are in this order
+
+The first version of this plan opened with the clock — wake earlier, sleep
+earlier, get outside — and put drawing three weeks out. That is how someone with
+spare discipline would build it. The discipline here is already fully committed
+to work; there is none spare. Curiosity is the tank that still has fuel in it.
+
+It also cut sleep. Lights-out at 01:00 with a 07:15 wake is 6h15m, which was
+*less* than the 7h it was replacing, in a plan whose author had already reported
+memory trouble and emotional flatness. The first phase was pointed the wrong way.
+
+So:
+
+| Phase | Week | What opens |
+|---|---|---|
+| 1 · what you miss | 1 | The first hour, reading, the sketchbook, the three lines |
+| 2 · the clock, and her | 2 | Wake 07:30, outside, the call at 23:30, lights out 00:30 |
+| 3 · the body, and the voice | 3 | Movement, meals, the walk, reading aloud, the Saturday talk |
+| 4 · the world | 4 | The social rung, one new place, calling home, the Sunday hour |
+
+Phase 1 takes nothing away. Phase 2 moves the clock only once there is a reason
+to be awake earlier, and only once the 00:30–02:00 tail has lost its job — which
+is the whole point of putting the drawing block at 21:00 first.
+
+**The floor is seven hours.** If 00:30 will not hold, move `wake` later rather
+than moving `lights` earlier.
+
+---
+
+## The first hour
+
+One 60-minute block, before work opens, with a declared mode: **writing**,
+**learning**, or **project**. The bot asks at the morning push, logs the answer,
+and shows the week's spread — a fixed rota gets resented by week two, and free
+choice while depleted defaults to whichever mode is easiest.
+
+**Project mornings are capped at two a week** (`PROJECT_MODE_CAP`). The failure
+mode is specific: "personal project" becomes work with a different repo name,
+done for free, at 09:15, and eats the block whole. The qualifying test is no
+deadline, no user, no architecture document. If it has invariants, it is work.
+
+**The block only survives if work formally starts later.** Otherwise you do the
+hour, then work the same thirteen hours behind it, and net nothing but tiredness.
+
+---
+
+## The Saturday talk
+
+A random topic from a pool of 150, then three stages in this order:
+
+1. **10 minutes, screen on.** Read. Two or three sources. Write nothing.
+2. **5 minutes, screen off, tabs closed.** Write by hand, from memory. Not a
+   transcript — a reconstruction. What you cannot remember is the part you did
+   not learn, and finding that out is the point of doing it this way round.
+3. **2 minutes minimum, one take, to camera.** From the notes. A second take
+   makes it a reading exercise.
+
+Then one typed line: the most interesting thing you learned, notebook closed.
+
+**No AI, at any stage.** Websites are fine. Nothing enforces this and nothing
+needs to — the struggle is the whole point, being the exact thing that got
+automated out of the rest of the week.
+
+Topics are used once and never repeat until the pool is exhausted, and **there
+are no re-rolls**. The failure mode is rolling until you land on something
+adjacent to what you already know, at which point the habit becomes a comfort
+exercise. Ten minutes of reading gives a shallow two minutes; that is correct.
+The skill is fluency on thin material, not expertise.
+
+Stages advance on **button taps, not a timer** — serverless cannot wake itself
+in ten minutes without another cron job, and taps are better anyway: each one is
+a commitment, and the thing works whenever you start rather than only at 11:00.
+
+---
+
+## Two notebooks, and neither is digital
+
+- **The sketchbook** — dated, in order, nothing torn out, nothing posted. Pride
+  comes from flipping back twenty pages.
+- **The topic notebook** — the Saturday talk's stage-2 notes, same rules.
+
+`draw` used to say *"no outcome, nothing to post"*. Killing the audience was
+right; killing the outcome was not. Drawing was described as *learning, pride,
+quiet, interesting* — three of those four need visible progress and only one
+needs solitude. Hence: unpostable, but sequential.
 
 The bot's tone rules live at the top of `server/messages.ts` and are load-bearing:
 no disappointment, no zeroing out, offer smaller before harder, buttons over typing.
@@ -83,8 +173,8 @@ so the address survives redeploys.
 
 ## Scheduling the three daily pushes
 
-The bot pushes at **7:10am, 1:15pm and 12:20am IST**. Times are driven by whatever
-hits `/api/cron/tick`.
+The bot pushes at the times in `SLOTS` (`server/config.ts`). Times are driven by
+whatever hits `/api/cron/tick` — the config values are display only.
 
 **Vercel's Hobby plan allows two cron jobs, once a day each** — so `vercel.json`
 registers only morning and evening, and Hobby crons fire *somewhere within the hour*
@@ -96,9 +186,29 @@ is not good enough.
 
 | When (IST) | URL |
 |---|---|
-| 07:10 | `https://daily.ranax.co/api/cron/tick?slot=morning&key=<APP_SECRET>` |
-| 13:15 | `https://daily.ranax.co/api/cron/tick?slot=midday&key=<APP_SECRET>` |
-| 00:20 | `https://daily.ranax.co/api/cron/tick?slot=evening&key=<APP_SECRET>` |
+| 09:10 | `https://daily.ranax.co/api/cron/tick?slot=morning&key=<APP_SECRET>` |
+| 12:15 | `https://daily.ranax.co/api/cron/tick?slot=lunch&key=<APP_SECRET>` |
+| 13:20 | `https://daily.ranax.co/api/cron/tick?slot=midday&key=<APP_SECRET>` |
+| 21:00 | `https://daily.ranax.co/api/cron/tick?slot=draw&key=<APP_SECRET>` |
+| 00:20 | `https://daily.ranax.co/api/cron/tick?slot=wrap&key=<APP_SECRET>` |
+
+**The morning job is at 09:10 while phase 1 runs**, because phase 1 does not move
+your wake time and a 07:10 push would arrive while you are asleep. Move it to
+07:20 when phase 2 lands.
+
+**The 21:00 `draw` job is the one that matters most** — it is the push for the
+highest-value habit in the plan. If only two jobs can exist, make them `draw` and
+`morning`.
+
+The Saturday talk needs **no cron of its own**: the topic is handed out by the
+morning push and the stages advance on button taps.
+
+### If the scheduler dies
+
+Every tick stamps `last_tick`. The website shows a warning when nothing has
+fired in `STALE_TICK_HOURS` (26). Nothing inside the app can alarm on its own
+cron failing to run — that is the point of the banner. Silence should never be
+read as your own lapse when it is an outage.
 
 Then delete the `crons` block from `vercel.json` so nothing fires twice.
 
@@ -121,11 +231,33 @@ npx tsx server/time.test.ts    # 19 assertions covering the boundary and forgive
 
 ## Changing the plan
 
-Everything is in **`server/config.ts`** — habits, points, phases, rewards. Edit it and:
+Everything is in **`server/config.ts`** — habits, points, phases, modes, topics,
+the ladder, rewards. Edit it and:
 
 ```bash
+npm run db:push          # only if schema.ts changed
 npm run db:seed
 ```
+
+### …without a local `.env`
+
+Both of those need `DATABASE_URL`, which lives in Vercel. `/api/admin` does the
+same work server-side, guarded by `APP_SECRET` like the cron:
+
+```
+GET /api/admin?key=<APP_SECRET>&migrate=1        # additive DDL only, idempotent
+GET /api/admin?key=<APP_SECRET>&seed=1           # reconcile habits + topics
+GET /api/admin?key=<APP_SECRET>&seed=1&force=1   # ALSO reset points and active
+```
+
+`migrate` is additive only — every statement is `IF NOT EXISTS` and nothing
+drops anything. The check-in history is the one thing here that cannot be
+rebuilt, and an endpoint reachable by URL has no business being able to destroy
+it.
+
+Use `force=1` **once**, when point values change, and never again — `points` and
+`active` are the two fields the bot edits when it offers to halve or pause
+something, and a redeploy must not quietly undo that.
 
 Seeding **preserves `points` and `active`** on habits that already exist, because those
 are the two fields the bot edits at 12:30am when it offers to halve or pause something.
@@ -153,6 +285,21 @@ web/              Vite + React front end
 
 ```
 /today    today's list        /rewards  spend points
-/week     the grid            /note     the three lines
+/week     the grid            /note     the three lines, then the number
 /status   level, points, week /habits   pause or restore
+/topic    the Saturday talk   /ladder   the social rungs
+/mode     set the first hour
 ```
+
+## Tests
+
+```bash
+npx tsx server/time.test.ts    # logical days, weeks, the phase clock
+npx tsx server/plan.test.ts    # topics, the week valve, modes, the ladder
+npm run typecheck
+```
+
+`server/plan.ts` holds every decision that is a pure function of its arguments —
+which topic, whether the valve trips, what to offer, where the ladder stands.
+That is deliberate: it is the part worth testing, and it has no database, no
+Telegram and no clock in it.

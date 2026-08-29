@@ -8,6 +8,7 @@
  */
 import { db, schema } from './db/client.js'
 import { HABITS } from './config.js'
+import { seedTopics } from './store.js'
 import { eq } from 'drizzle-orm'
 
 const force = process.argv.includes('--force')
@@ -44,7 +45,8 @@ async function main() {
     await db().update(schema.habits).set({ active: false }).where(eq(schema.habits.id, r.id))
   }
 
-  console.log(`seeded — ${added} added, ${updated} updated, ${removed.length} deactivated`)
+  const topicsAdded = await seedTopics()
+  console.log(`seeded — ${added} added, ${updated} updated, ${removed.length} deactivated, ${topicsAdded} topics`)
   if (!force && updated) console.log('(points/active preserved; re-run with --force to reset them)')
 }
 
