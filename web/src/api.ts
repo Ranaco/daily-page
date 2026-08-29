@@ -14,6 +14,28 @@ export type GridRow = {
 
 export type Topic = { id: string; domain: string; text: string }
 
+export type Entry = {
+  id: number
+  day: string
+  habitId: string | null
+  habitLabel: string | null
+  kind: string
+  caption: string | null
+  fileId: string | null
+  mime: string | null
+  width: number | null
+  height: number | null
+  duration: number | null
+  at: string
+}
+
+export type JournalMonth = {
+  month: string
+  total: number
+  days: { day: string; items: Entry[] }[]
+  months: string[]
+}
+
 export type AppState = {
   today: string; weekStart: string; days: string[]
   phase: number; weekIndex: number
@@ -58,3 +80,17 @@ export const claim = (rewardId: string) =>
   req<{ ok: boolean; state: AppState }>('/api/claim', {
     method: 'POST', body: JSON.stringify({ rewardId }),
   })
+
+export const getJournal = (month?: string) =>
+  req<JournalMonth>(`/api/journal${month ? `?month=${month}` : ''}`)
+
+export const addNote = (caption: string, habitId?: string | null) =>
+  req<{ ok: boolean; loggedNow: boolean }>('/api/journal', {
+    method: 'POST', body: JSON.stringify({ caption, habitId: habitId ?? null }),
+  })
+
+export const removeEntry = (id: number) =>
+  req<{ ok: boolean }>(`/api/journal?id=${id}`, { method: 'DELETE' })
+
+/** Media streams through our own origin — Telegram's URL carries the bot token. */
+export const fileUrl = (id: number) => `/api/file?id=${id}`

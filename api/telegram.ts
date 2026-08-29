@@ -6,9 +6,9 @@ import { MODES } from '../server/config.js'
 import { projectModeLeft } from '../server/plan.js'
 import { logicalDay, weekStart } from '../server/time.js'
 import {
-  allHabits, claimReward, currentRung, getSetting, getState, levelFor, lifetimePoints,
-  modesInWeek, pauseHabit, saveMood, saveNote, setMode, setSetting, setTalkStage,
-  shrinkHabit, talkStage, toggle, weekTopic,
+  addEntry, allHabits, attachEntry, claimReward, currentRung, getSetting, getState,
+  levelFor, lifetimePoints, modesInWeek, pauseHabit, saveMood, saveNote, setMode,
+  setSetting, setTalkStage, shrinkHabit, talkStage, toggle, weekTopic,
 } from '../server/store.js'
 import { db, schema } from '../server/db/client.js'
 import { eq } from 'drizzle-orm'
@@ -39,7 +39,63 @@ async function route(update: any) {
   if (String(from) !== ownerId()) return // single-user bot; ignore everyone else
 
   if (update.callback_query) return onCallback(update.callback_query)
+  if (update.message && hasMedia(update.message)) return onMedia(update.message)
   if (update.message?.text) return onText(update.message)
+}
+
+// ------------------------------------------------------------------ media
+
+function hasMedia(msg: any): boolean {
+  return !!(msg.photo || msg.video || msg.voice || msg.video_note || msg.document || msg.audio)
+}
+
+/**
+ * Anything you send the bot becomes an artifact against today.
+ *
+ * Telegram is the store: it takes large video, converts photos to JPEG (so no
+ * HEIC ever reaches the browser), and hands back a file_id that resolves
+ * forever. Nothing is uploaded anywhere else and no bytes touch Postgres.
+ */
+async function onMedia(msg: any) {
+  const day = logicalDay()
+
+  // photo arrives as an array of sizes, ascending — the last is the original
+  const photo = msg.photo ? msg.photo[msg.photo.length - 1] : null
+  const src =
+    photo ? { kind: 'photo', f: photo }
+    : msg.video ? { kind: 'video', f: msg.video }
+    : msg.video_note ? { kind: 'video', f: msg.video_note }
+    : msg.voice ? { kind: 'voice', f: msg.voice }
+    : msg.audio ? { kind: 'audio', f: msg.audio }
+    : { kind: 'file', f: msg.document }
+
+  const f = src.f
+  const entry = await addEntry({
+    day,
+    kind: src.kind,
+    caption: msg.caption ?? null,
+    fileId: f.file_id,
+    uniqueId: f.file_unique_id,
+    mime: f.mime_type ?? null,
+    bytes: f.file_size ?? null,
+    width: f.width ?? null,
+    height: f.height ?? null,
+    duration: f.duration ?? null,
+  })
+
+  // Attaching is what makes it proof rather than a photo. Offer the habits that
+  // are actually live today, proof-required ones first.
+  const state = await getState(day)
+  const candidates = [...state.tasks, ...state.weekly]
+  candidates.sort((a, b) => Number(!!b.needsProof) - Number(!!a.needsProof))
+
+  const rows = candidates.slice(0, 6).map((h) => [{
+    text: h.needsProof ? `${h.label} — proof` : h.label,
+    data: `att:${entry.id}:${h.id}`,
+  }])
+  rows.push([{ text: 'Just the journal', data: `att:${entry.id}:` }])
+
+  return send(M.captured(src.kind), rows)
 }
 
 // ------------------------------------------------------------------- text
@@ -147,10 +203,28 @@ async function onCallback(cq: any) {
 
   if (kind === 'noop') return answer(cq.id, 'Noted.')
 
+  if (kind === 'att' && a) {
+    const habitId = b || null
+    const entry = await attachEntry(Number(a), habitId)
+    if (!entry) return answer(cq.id, 'Gone.')
+    const label = habitId
+      ? (await allHabits()).find((h) => h.id === habitId)?.label ?? habitId
+      : null
+    await answer(cq.id, label ? 'Attached' : 'Filed')
+    if (chatId && messageId) {
+      try { await edit(chatId, messageId, M.attached(label)) } catch {}
+    }
+    return
+  }
+
   if (kind === 't' && a) {
     const day = b || logicalDay()
     const before = await lifetimePoints()
-    const { done, habit } = await toggle(a, day)
+    const { done, habit, blocked } = await toggle(a, day)
+    if (blocked) {
+      await answer(cq.id, 'Needs proof')
+      return send(M.needsProof(habit.label))
+    }
     const state = await getState()
 
     await answer(cq.id, done ? `+${habit.points}` : `−${habit.points}`)

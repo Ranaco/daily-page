@@ -17,6 +17,8 @@ export const habits = pgTable('habits', {
   weekly: boolean('weekly').notNull().default(false),
   /** JSON array of weekday numbers, or null for every day. */
   days: text('days'),
+  /** Blocks ticking until a journal entry is attached for that day. */
+  needsProof: boolean('needs_proof').notNull().default(false),
   active: boolean('active').notNull().default(true),
   sort: integer('sort').notNull().default(0),
 })
@@ -70,6 +72,37 @@ export const topics = pgTable('topics', {
 export const modes = pgTable('modes', {
   day: date('day').primaryKey(),
   mode: text('mode').notNull(),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+/**
+ * The journal: every artifact the plan produces. A talk video, a photo of a
+ * finished sketchbook page, a screenshot, a line of typed text.
+ *
+ * Deliberately generic, because the plan will grow task types that do not exist
+ * yet. `habitId` is nullable so an entry can belong to just a day; `kind` is an
+ * open string, not an enum; `meta` is free JSON. A new kind of artifact needs a
+ * new `kind` value and no migration.
+ *
+ * Files live in Telegram. We store `fileId` — resolvable forever through
+ * getFile — and never the bytes. Postgres is a bad blob store and these are
+ * videos. `uniqueId` is stable per file, so a re-send is detectable.
+ */
+export const entries = pgTable('entries', {
+  id: serial('id').primaryKey(),
+  day: date('day').notNull(),
+  habitId: text('habit_id'),
+  kind: text('kind').notNull(),
+  caption: text('caption'),
+  fileId: text('file_id'),
+  uniqueId: text('unique_id'),
+  mime: text('mime'),
+  bytes: integer('bytes'),
+  width: integer('width'),
+  height: integer('height'),
+  duration: integer('duration'),
+  /** JSON. Whatever a future task type needs that this schema does not have. */
+  meta: text('meta'),
   at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
 })
 

@@ -24,6 +24,7 @@ async function main() {
       label: h.label, sub: h.sub, points: h.points,
       spine: h.spine, weekly: !!h.weekly,
       days: h.days ? JSON.stringify(h.days) : null,
+      needsProof: !!h.needsProof,
       sort: i,
     }
 

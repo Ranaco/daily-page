@@ -152,3 +152,171 @@ td.total .cell{background:var(--blue);color:#FFF7E8;font-size:.95rem;width:44px;
   .task{grid-template-columns:52px 1fr auto;gap:0 10px}
   .task .pts{font-size:1.25rem}
 }
+
+
+/* =====================================================================
+   THE JOURNAL — a quiet room inside a loud house.
+
+   Scoped on <body data-surface="journal">, NOT on a child of body. The
+   halftone and the shell header are body-level, so a token declared on an
+   inner element can never reach them: custom properties inherit downward
+   only. Declaring these here is what makes the override actually apply.
+   ===================================================================== */
+
+body[data-surface="journal"]{
+  --j-page:#F3F0E9;
+  --j-card:#FFFDF8;
+  --j-ink:#16130F;
+  --j-ink-2:rgb(22 19 15 / .68);   /* 0.68, not 0.56 — 0.56 measures 4.27:1 and fails AA */
+  --j-ink-3:rgb(22 19 15 / .46);
+  --j-rule:rgb(22 19 15 / .13);
+  --j-fill:rgb(22 19 15 / .05);
+  --j-accent:#9A3520;              /* darkened from the app red so it passes as text */
+  background:var(--j-page);
+  background-image:none;           /* the halftone lives here, so it dies here */
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) body[data-surface="journal"]{
+    --j-page:#131116; --j-card:#1D1A22;
+    --j-ink:#EFEAE0;
+    --j-ink-2:rgb(239 234 224 / .68);
+    --j-ink-3:rgb(239 234 224 / .46);
+    --j-rule:rgb(239 234 224 / .14);
+    --j-fill:rgb(239 234 224 / .07);
+    --j-accent:#FF8A72;
+  }
+}
+:root[data-theme="dark"] body[data-surface="journal"]{
+  --j-page:#131116; --j-card:#1D1A22;
+  --j-ink:#EFEAE0;
+  --j-ink-2:rgb(239 234 224 / .68);
+  --j-ink-3:rgb(239 234 224 / .46);
+  --j-rule:rgb(239 234 224 / .14);
+  --j-fill:rgb(239 234 224 / .07);
+  --j-accent:#FF8A72;
+}
+
+/* The comic devices are element rules, so they need element rules to undo.
+   Setting font-family on a container loses to h1{font-family:Bangers}. */
+body[data-surface="journal"] .j h1,
+body[data-surface="journal"] .j h2,
+body[data-surface="journal"] .j h3{
+  font-family:"Archivo",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  -webkit-text-stroke:0;
+  text-shadow:none;
+  color:var(--j-ink);
+}
+
+.j{
+  color:var(--j-ink);
+  font-family:"Archivo",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  display:flex;flex-direction:column;gap:26px;
+  max-width:620px;margin:0 auto;
+}
+.j-month{
+  font-size:2rem;font-weight:500;letter-spacing:-.028em;line-height:1.15;
+  margin:0;padding-top:4px;
+}
+.j-month span{color:var(--j-ink-3);font-weight:400}
+
+.j-day{display:flex;flex-direction:column;gap:11px}
+.j-date{
+  font-size:.8125rem;font-weight:600;letter-spacing:.005em;color:var(--j-ink-2);
+  display:flex;align-items:center;gap:9px;
+}
+.j-date::after{content:"";flex:1;height:1px;background:var(--j-rule)}
+
+.j-card{
+  background:var(--j-card);
+  border:1px solid var(--j-rule);
+  border-radius:18px;
+  padding:14px 16px 15px;
+  display:flex;flex-direction:column;gap:10px;
+  box-shadow:none;
+}
+.j-card .j-meta{
+  display:flex;flex-wrap:wrap;align-items:center;gap:7px;
+  font-size:.75rem;color:var(--j-ink-2);font-variant-numeric:tabular-nums;
+}
+.j-chip{
+  background:var(--j-fill);color:var(--j-ink-2);
+  padding:2px 8px;border-radius:8px;font-weight:600;font-size:.72rem;
+}
+.j-card p{
+  font-size:1.0625rem;line-height:1.68;letter-spacing:-.011em;color:var(--j-ink);
+  margin:0;white-space:pre-wrap;overflow-wrap:anywhere;
+}
+.j-media{
+  border-radius:12px;overflow:hidden;background:var(--j-fill);
+  display:block;width:100%;
+}
+.j-media img,.j-media video{display:block;width:100%;height:auto;max-height:520px;object-fit:cover}
+.j-media audio{display:block;width:100%;padding:10px}
+.j-file{
+  display:flex;align-items:center;gap:10px;padding:11px 13px;
+  background:var(--j-fill);border-radius:12px;font-size:.9rem;color:var(--j-ink-2);
+}
+.j-del{
+  align-self:flex-start;background:none;border:0;padding:4px 2px;cursor:pointer;
+  font:inherit;font-size:.75rem;color:var(--j-ink-2);
+}
+.j-del:hover{color:var(--j-accent)}
+
+/* composer */
+.j-write{display:flex;flex-direction:column;gap:9px}
+.j-write textarea{
+  width:100%;min-height:96px;resize:vertical;
+  background:var(--j-card);color:var(--j-ink);
+  border:1px solid var(--j-rule);border-radius:16px;
+  padding:13px 15px;font:inherit;font-size:1.0625rem;line-height:1.6;
+}
+.j-write textarea::placeholder{color:var(--j-ink-3)}
+.j-write textarea:focus{outline:2px solid var(--j-accent);outline-offset:1px;border-color:transparent}
+.j-write .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.j-save{
+  background:var(--j-ink);color:var(--j-page);border:0;border-radius:999px;
+  padding:9px 20px;font:inherit;font-weight:600;font-size:.9rem;cursor:pointer;
+}
+.j-save:disabled{opacity:.4;cursor:not-allowed}
+.j-hint{font-size:.8125rem;color:var(--j-ink-3);line-height:1.5}
+
+/* the end. nothing renders after this element — that is the point of it. */
+.j-end{
+  padding:30px 0 8px;text-align:center;
+  font-size:.8125rem;color:var(--j-ink-3);line-height:1.6;
+}
+.j-empty{
+  padding:34px 20px;text-align:center;color:var(--j-ink-2);
+  background:var(--j-card);border:1px solid var(--j-rule);border-radius:18px;
+  font-size:.95rem;line-height:1.6;
+}
+.j-months{display:flex;flex-wrap:wrap;gap:7px;padding-top:2px}
+.j-months button{
+  background:var(--j-fill);color:var(--j-ink-2);border:0;border-radius:9px;
+  padding:6px 11px;font:inherit;font-size:.8rem;font-weight:600;cursor:pointer;
+  font-variant-numeric:tabular-nums;
+}
+.j-months button[aria-current="true"]{background:var(--j-ink);color:var(--j-page)}
+
+/* The nav is chrome, and chrome belongs to the room you are standing in.
+   Leaving four Bangers chips with hard shadows above a reading surface is the
+   "quiet content in a loud frame" failure — the seam should be the tab change,
+   not a permanent strip of the other app hanging over this one. */
+body[data-surface="journal"] nav button{
+  font-family:"Archivo",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  font-size:.8125rem;font-weight:600;letter-spacing:0;
+  background:var(--j-fill);color:var(--j-ink-2);
+  border:1px solid transparent;border-radius:999px;
+  box-shadow:none;padding:7px 14px;
+  transition:background .15s,color .15s;
+}
+body[data-surface="journal"] nav button:hover{
+  transform:none;box-shadow:none;background:var(--j-rule);color:var(--j-ink);
+}
+body[data-surface="journal"] nav button[aria-selected="true"]{
+  background:var(--j-ink);color:var(--j-page);-webkit-text-stroke:0;
+}
+body[data-surface="journal"] nav{
+  max-width:620px;margin:0 auto 18px;gap:6px;
+}
+body[data-surface="journal"] .wrap{padding-top:clamp(14px,3vw,26px)}

@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { AppState, claim, getState, toggle } from './api.js'
+import {
+  AppState, Entry, JournalMonth, addNote, claim, fileUrl, getJournal,
+  getState, removeEntry, toggle,
+} from './api.js'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const MARK: Record<string, string> = { done: '✓', forgiven: '–', miss: '', future: '', locked: '' }
 const PHASE_NAMES = ['', 'The clock', 'The body', 'The mind', 'The world']
 
-type Tab = 'today' | 'week' | 'rewards'
+type Tab = 'today' | 'week' | 'rewards' | 'journal'
 
 export default function App() {
   const [state, setState] = useState<AppState | null>(null)
@@ -19,6 +22,14 @@ export default function App() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // The halftone and the shell header are body-level. A token set on an inner
+  // element cannot reach them, so the surface is flagged on <body> itself.
+  useEffect(() => {
+    if (tab === 'journal') document.body.dataset.surface = 'journal'
+    else delete document.body.dataset.surface
+    return () => { delete document.body.dataset.surface }
+  }, [tab])
 
   // The day rolls over at 4am; re-fetch on focus so a phone left open is never stale.
   useEffect(() => {
@@ -55,6 +66,7 @@ export default function App() {
 
   return (
     <Shell>
+      {tab !== 'journal' && (
       <header>
         <div className="titlebar">
           <h1>THE DAILY PAGE</h1>
@@ -85,14 +97,18 @@ export default function App() {
           </div>
         </div>
       </header>
+      )}
 
       <nav role="tablist">
-        {(['today', 'week', 'rewards'] as Tab[]).map((t) => (
+        {(['today', 'week', 'rewards', 'journal'] as Tab[]).map((t) => (
           <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
-            {t === 'today' ? 'Today' : t === 'week' ? 'The Grid' : 'Rewards'}
+            {t === 'today' ? 'Today' : t === 'week' ? 'The Grid'
+              : t === 'rewards' ? 'Rewards' : 'Journal'}
           </button>
         ))}
       </nav>
+
+      {tab === 'journal' && <Journal onSaved={load} />}
 
       {tab === 'today' && (
         <div className="view on">
@@ -306,4 +322,169 @@ function burst(text: string) {
   el.classList.add('go')
   window.clearTimeout(burstTimer)
   burstTimer = window.setTimeout(() => el.classList.remove('go'), 760)
+}
+
+
+// ===================================================================== journal
+
+const MONTH_NAMES = ['January','February','March','April','May','June','July',
+  'August','September','October','November','December']
+
+function monthLabel(m: string) {
+  const [y, mm] = m.split('-').map(Number)
+  return `${MONTH_NAMES[(mm ?? 1) - 1]} ${y}`
+}
+
+function dayLabel(iso: string) {
+  return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', {
+    weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC',
+  })
+}
+
+function timeLabel(at: string) {
+  return new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+}
+
+function secs(n: number | null) {
+  if (!n) return null
+  return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`
+}
+
+/**
+ * The journal.
+ *
+ * One month at a time, fully loaded at first paint — no lazy-load, no
+ * IntersectionObserver, no "load more". The set is bounded and knowable, which
+ * keeps the scrollbar honest and lets the page actually end. The last element
+ * in the DOM is the end marker, with nothing after it that could later be
+ * filled.
+ *
+ * Deliberately absent: any adherence number. The Grid already scores
+ * compliance; this surface is only what you made. Keeping the two jobs apart
+ * is also what stops the two tabs disagreeing about a given Tuesday.
+ */
+function Journal({ onSaved }: { onSaved: () => void }) {
+  const [data, setData] = useState<JournalMonth | null>(null)
+  const [month, setMonth] = useState<string | undefined>(undefined)
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const load = useCallback(async (m?: string) => {
+    try { setData(await getJournal(m)); setErr(null) }
+    catch (e) { setErr((e as Error).message) }
+  }, [])
+
+  useEffect(() => { load(month) }, [load, month])
+
+  async function save() {
+    const body = text.trim()
+    if (!body || busy) return
+    setBusy(true)
+    try {
+      await addNote(body)
+      setText('')
+      await load(month)
+      onSaved()          // the entry silently ticked `log`; refresh the shell
+    } catch (e) { setErr((e as Error).message) }
+    finally { setBusy(false) }
+  }
+
+  async function drop(id: number) {
+    if (busy) return
+    setBusy(true)
+    try { await removeEntry(id); await load(month) }
+    catch (e) { setErr((e as Error).message) }
+    finally { setBusy(false) }
+  }
+
+  if (err) return <div className="j"><div className="j-empty">Could not load the journal. {err}</div></div>
+  if (!data) return <div className="j"><div className="j-empty">Loading…</div></div>
+
+  const current = data.month
+
+  return (
+    <div className="j">
+      <h1 className="j-month">
+        {monthLabel(current)} <span>· {data.total} {data.total === 1 ? 'entry' : 'entries'}</span>
+      </h1>
+
+      <div className="j-write">
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="What happened. What you felt, and where. One thing tomorrow."
+          aria-label="Write a journal entry"
+        />
+        <div className="row">
+          <button className="j-save" onClick={save} disabled={!text.trim() || busy}>Save</button>
+          <span className="j-hint">Send the bot a photo or video to file it here.</span>
+        </div>
+      </div>
+
+      {data.days.length === 0 && (
+        <div className="j-empty">
+          Nothing filed in {monthLabel(current)} yet.<br />
+          Write a line above, or send the bot a photo of what you made.
+        </div>
+      )}
+
+      {data.days.map((d) => (
+        <div className="j-day" key={d.day}>
+          <div className="j-date">{dayLabel(d.day)}</div>
+          {d.items.map((e) => <Card key={e.id} entry={e} onDelete={() => drop(e.id)} />)}
+        </div>
+      ))}
+
+      {data.months.length > 1 && (
+        <div className="j-months">
+          {data.months.map((m) => (
+            <button key={m} aria-current={m === current} onClick={() => setMonth(m)}>
+              {monthLabel(m)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="j-end">
+        {data.total > 0
+          ? `That's ${monthLabel(current)}.`
+          : 'Nothing here yet.'}
+      </div>
+    </div>
+  )
+}
+
+function Card({ entry, onDelete }: { entry: Entry; onDelete: () => void }) {
+  const src = fileUrl(entry.id)
+  return (
+    <div className="j-card">
+      {entry.kind === 'photo' && (
+        <div className="j-media">
+          <img src={src} alt={entry.caption ?? 'Journal photo'} loading="lazy" />
+        </div>
+      )}
+      {entry.kind === 'video' && (
+        <div className="j-media">
+          {/* preload=metadata, never autoplay — this is not a feed */}
+          <video src={src} controls preload="metadata" playsInline />
+        </div>
+      )}
+      {(entry.kind === 'voice' || entry.kind === 'audio') && (
+        <div className="j-media"><audio src={src} controls preload="metadata" /></div>
+      )}
+      {entry.kind === 'file' && (
+        <a className="j-file" href={src}>📎 {entry.caption ?? 'Attachment'}</a>
+      )}
+
+      {entry.caption && entry.kind !== 'file' && <p>{entry.caption}</p>}
+
+      <div className="j-meta">
+        {entry.habitLabel && <span className="j-chip">{entry.habitLabel}</span>}
+        <span>{timeLabel(entry.at)}</span>
+        {secs(entry.duration) && <span>· {secs(entry.duration)}</span>}
+        <button className="j-del" onClick={onDelete} aria-label="Delete this entry">Delete</button>
+      </div>
+    </div>
+  )
 }

@@ -87,6 +87,25 @@ async function migrate() {
       text text not null,
       used_on date
     )`,
+    sql`alter table habits add column if not exists needs_proof boolean not null default false`,
+    sql`create table if not exists entries (
+      id serial primary key,
+      day date not null,
+      habit_id text,
+      kind text not null,
+      caption text,
+      file_id text,
+      unique_id text,
+      mime text,
+      bytes integer,
+      width integer,
+      height integer,
+      duration integer,
+      meta text,
+      at timestamptz not null default now()
+    )`,
+    sql`create index if not exists entries_day_idx on entries (day desc, id desc)`,
+    sql`create index if not exists entries_habit_day_idx on entries (habit_id, day)`,
     sql`create table if not exists modes (
       day date primary key,
       mode text not null,
@@ -115,6 +134,7 @@ async function seed(force: boolean) {
       label: h.label, sub: h.sub, points: h.points,
       spine: h.spine, weekly: !!h.weekly,
       days: h.days ? JSON.stringify(h.days) : null,
+      needsProof: !!h.needsProof,
       sort: i,
     }
     if (!known.has(h.id)) {

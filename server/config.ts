@@ -41,6 +41,16 @@ export type Habit = {
   weekly?: boolean
   /** 0 = Sun … 6 = Sat. Omit for every day. */
   days?: number[]
+  /**
+   * Cannot be ticked until something is attached to it in the journal.
+   *
+   * For the talk this is the difference between a record and a claim. It is the
+   * habit most easily reduced to a tick — nobody sees the video, and "I mostly
+   * did it" is always available — and it is also the one whose artifacts are
+   * worth the most in six months, when the question is whether the speaking
+   * actually changed. Proof is what stops it decaying into a checkbox.
+   */
+  needsProof?: boolean
 }
 
 /**
@@ -91,7 +101,7 @@ export const HABITS: Habit[] = [
   { id: 'pwalk',  phase: 3, time: '1:20',     slot: 'midday',  points: 2, spine: false,
     label: 'Walk after lunch',      sub: '10 minutes. Best single fix for the slump.' },
   { id: 'talk',   phase: 3, time: 'Sat',      slot: 'morning', points: 6, spine: false,
-    weekly: true, days: [6],
+    weekly: true, days: [6], needsProof: true,
     label: 'The Saturday talk',     sub: '10 min reading, 5 min writing by hand, then say it to camera.' },
 
   // ---- Phase 4 · the world ---------------------------------------------

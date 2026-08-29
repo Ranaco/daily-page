@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lte, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm'
 import { db, schema } from './db/client.js'
 import {
   ALL_TOPICS, HABITS, MODES, REWARDS, SHELF_LOCK_ON_MISS, STALE_TICK_HOURS,
@@ -9,7 +9,7 @@ import {
 } from './plan.js'
 import { addDays, dayOfWeek, logicalDay, weekDays, weekIndex, weekStart } from './time.js'
 
-const { habits, checkins, claims, notes, settings, topics, modes } = schema
+const { habits, checkins, claims, notes, settings, topics, modes, entries } = schema
 
 export type CellState = 'done' | 'forgiven' | 'miss' | 'future' | 'locked'
 
@@ -17,6 +17,7 @@ export type HabitRow = {
   id: string; phase: number; time: string; slot: string
   label: string; sub: string; points: number
   spine: boolean; weekly: boolean; days: number[] | null
+  needsProof: boolean
   active: boolean; sort: number
 }
 
@@ -155,10 +156,145 @@ export async function toggle(habitId: string, day: string) {
 
   if (existing) {
     await db().delete(checkins).where(eq(checkins.id, existing.id))
-    return { done: false, delta: -existing.points, habit: h }
+    return { done: false, delta: -existing.points, habit: h, blocked: false }
   }
+
+  // Only ticking ON is gated. Un-ticking must always work, or a bad attachment
+  // traps the habit in a state there is no way back out of.
+  if (h.needsProof && (await entryCount(habitId, day)) === 0) {
+    return { done: false, delta: 0, habit: h, blocked: true }
+  }
+
   await db().insert(checkins).values({ habitId, day, points: h.points })
-  return { done: true, delta: h.points, habit: h }
+  return { done: true, delta: h.points, habit: h, blocked: false }
+}
+
+/**
+ * Tick a habit without un-ticking it if it is already done.
+ *
+ * Saving a journal entry ticks `log`, and that must never toggle: writing a
+ * second entry on a day you already logged would otherwise silently remove the
+ * points. `unique(habit_id, day)` makes the insert idempotent at the database,
+ * so the conflict clause is the whole implementation.
+ */
+export async function tickOnce(habitId: string, day: string) {
+  const [h] = await db().select().from(habits).where(eq(habits.id, habitId)).limit(1)
+  if (!h || !h.active) return { ticked: false }
+  const before = await db().select().from(checkins)
+    .where(and(eq(checkins.habitId, habitId), eq(checkins.day, day))).limit(1)
+  if (before.length) return { ticked: false }
+  await db().insert(checkins).values({ habitId, day, points: h.points })
+    .onConflictDoNothing()
+  return { ticked: true, points: h.points }
+}
+
+// ----------------------------------------------------------------- journal
+
+export type NewEntry = {
+  day: string
+  habitId?: string | null
+  kind: string
+  caption?: string | null
+  fileId?: string | null
+  uniqueId?: string | null
+  mime?: string | null
+  bytes?: number | null
+  width?: number | null
+  height?: number | null
+  duration?: number | null
+  meta?: Record<string, unknown> | null
+}
+
+export async function addEntry(e: NewEntry) {
+  const [row] = await db().insert(entries).values({
+    day: e.day,
+    habitId: e.habitId ?? null,
+    kind: e.kind,
+    caption: e.caption ?? null,
+    fileId: e.fileId ?? null,
+    uniqueId: e.uniqueId ?? null,
+    mime: e.mime ?? null,
+    bytes: e.bytes ?? null,
+    width: e.width ?? null,
+    height: e.height ?? null,
+    duration: e.duration ?? null,
+    meta: e.meta ? JSON.stringify(e.meta) : null,
+  }).returning()
+  return row!
+}
+
+/** Artifacts attached to a habit on a day. Drives the proof gate. */
+export async function entryCount(habitId: string, day: string): Promise<number> {
+  const [row] = await db()
+    .select({ n: sql<number>`count(*)::int` })
+    .from(entries)
+    .where(and(eq(entries.habitId, habitId), eq(entries.day, day)))
+  return row?.n ?? 0
+}
+
+export async function attachEntry(id: number, habitId: string | null) {
+  const [row] = await db().update(entries).set({ habitId })
+    .where(eq(entries.id, id)).returning()
+  return row ?? null
+}
+
+export async function deleteEntry(id: number) {
+  await db().delete(entries).where(eq(entries.id, id))
+}
+
+export async function entryById(id: number) {
+  const [row] = await db().select().from(entries).where(eq(entries.id, id)).limit(1)
+  return row ?? null
+}
+
+export async function entriesOn(day: string) {
+  return db().select().from(entries).where(eq(entries.day, day)).orderBy(entries.id)
+}
+
+/**
+ * One calendar month of the journal, newest first.
+ *
+ * A month, not an offset page: the set is bounded and knowable at first paint,
+ * so the scrollbar stays honest and the surface ends. Nothing here lazy-loads.
+ */
+export async function journalMonth(month: string) {
+  const from = `${month}-01`
+  const to = monthEnd(month)
+  const rows = await db().select().from(entries)
+    .where(and(gte(entries.day, from), lte(entries.day, to)))
+    .orderBy(desc(entries.day), desc(entries.id))
+
+  const labels = new Map((await allHabits()).map((h) => [h.id, h.label]))
+  const days = new Map<string, unknown[]>()
+  for (const r of rows) {
+    if (!days.has(r.day)) days.set(r.day, [])
+    days.get(r.day)!.push({
+      ...r,
+      habitLabel: r.habitId ? labels.get(r.habitId) ?? r.habitId : null,
+      meta: r.meta ? (JSON.parse(r.meta) as Record<string, unknown>) : null,
+    })
+  }
+  return {
+    month,
+    total: rows.length,
+    days: [...days.entries()].map(([day, items]) => ({ day, items })),
+  }
+}
+
+function monthEnd(month: string): string {
+  const [y, m] = month.split('-').map(Number)
+  const d = new Date(Date.UTC(y!, m!, 0))
+  return d.toISOString().slice(0, 10)
+}
+
+/** Months that actually hold entries, newest first. The archive index. */
+export async function journalMonths(): Promise<string[]> {
+  const rows = await db()
+    .select({ m: sql<string>`to_char(${entries.day}, 'YYYY-MM')` })
+    .from(entries)
+    .groupBy(sql`to_char(${entries.day}, 'YYYY-MM')`)
+    .orderBy(sql`to_char(${entries.day}, 'YYYY-MM') desc`)
+  return rows.map((r) => r.m)
 }
 
 // ----------------------------------------------------------------- scoring

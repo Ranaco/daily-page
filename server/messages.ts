@@ -420,3 +420,50 @@ export const help = [
   'Pushes: the morning list, a nudge before lunch, one after, the drawing block,',
   'and the wrap after midnight. Silence the rest of the time.',
 ].join('\n')
+
+// ------------------------------------------------------------------ journal
+
+const KIND_WORD: Record<string, string> = {
+  photo: 'Photo', video: 'Video', voice: 'Voice note',
+  audio: 'Audio', file: 'File',
+}
+
+/**
+ * Said the moment a file lands. Deliberately flat: the artifact is the reward,
+ * and celebrating here would be celebrating an upload rather than the work.
+ */
+export function captured(kind: string): string {
+  const word = KIND_WORD[kind] ?? 'Saved'
+  return [`<b>${word} saved.</b>`, '', 'What was it for?'].join('\n')
+}
+
+export function attached(label: string | null): string {
+  return label ? `Filed against <b>${esc(label)}</b>.` : 'Filed under today.'
+}
+
+/**
+ * The proof gate. It refuses and then says exactly what clears it — a refusal
+ * with no route forward is just a wall.
+ */
+export function needsProof(label: string): string {
+  return [
+    `<b>${esc(label)}</b> needs something attached first.`,
+    '',
+    'Send the video, a photo of the page, or a screenshot — then tick it. This is '
+    + 'the one habit that is worth nothing as a tick and everything as a record.',
+  ].join('\n')
+}
+
+/**
+ * Duolingo's one transferable insight: forgiveness that has to be claimed never
+ * reaches the person who needed it, because someone who missed a day is not
+ * opening the app. So the cover is applied silently at the time, and reported
+ * afterwards — here, at the week close, when it is news rather than pressure.
+ */
+export function covered(labels: string[]): string | null {
+  if (!labels.length) return null
+  const list = labels.map((l) => esc(l)).join(', ')
+  return labels.length === 1
+    ? `One miss was covered this week: <b>${list}</b>. Nothing lost.`
+    : `Misses covered this week: <b>${list}</b>. Nothing lost.`
+}
