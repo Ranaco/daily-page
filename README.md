@@ -316,6 +316,19 @@ drops anything. The check-in history is the one thing here that cannot be
 rebuilt, and an endpoint reachable by URL has no business being able to destroy
 it.
 
+```
+GET /api/admin?key=<APP_SECRET>&restart=YYYY-MM-DD
+```
+
+`restart` moves the plan's start date and resets the phase clock to 1. Use it
+whenever the plan changes mid-week: the days before the change are unticked
+because they were untickable, and an earned phase gate would otherwise turn a
+plan edit into a repeated week. It touches only the clock — check-ins, notes,
+claims and topic history are never modified.
+
+The cron has the same guard from the other side: a week that ended before
+`started_on` is never judged at all.
+
 Use `force=1` **once**, when point values change, and never again — `points` and
 `active` are the two fields the bot edits when it offers to halve or pause
 something, and a redeploy must not quietly undo that.

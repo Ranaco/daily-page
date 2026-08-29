@@ -6,7 +6,8 @@ import { valveCandidates, weekValveTripped } from '../../server/plan.js'
 import { addDays, dayOfWeek, logicalDay, weekStart } from '../../server/time.js'
 import {
   advancePhase, allHabits, closedWeekPcts, currentPhase, getSetting, getState,
-  habitsBySlot, lockShelfFor, markTick, missedTwice, setSetting, talkStage, weekTopic,
+  habitsBySlot, lockShelfFor, markTick, missedTwice, setSetting, startedOn,
+  talkStage, weekTopic,
 } from '../../server/store.js'
 
 export const config = { maxDuration: 30 }
@@ -130,7 +131,12 @@ async function announceWeekAndPhase(today: string) {
   const thisWeek = weekStart(today)
   const lastAnnounced = await getSetting('last_week_announced')
 
-  if (lastAnnounced && lastAnnounced !== thisWeek) {
+  // A week that ended before the plan started is never judged. Days before the
+  // start are unticked because they were untickable, and with an earned gate
+  // that would turn "I changed the plan on Saturday" into a repeated week.
+  const started = weekStart(await startedOn())
+
+  if (lastAnnounced && lastAnnounced !== thisWeek && addDays(thisWeek, -7) >= started) {
     // Read the closing week BEFORE the phase moves, or its score is measured
     // against a phase that was not live while it was being earned.
     const closing = await getState(addDays(thisWeek, -1))

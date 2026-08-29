@@ -18,6 +18,7 @@ export const config = { maxDuration: 60 }
  *
  *   GET /api/admin?key=<APP_SECRET>&migrate=1
  *   GET /api/admin?key=<APP_SECRET>&seed=1[&force=1]
+ *   GET /api/admin?key=<APP_SECRET>&restart=YYYY-MM-DD
  *
  * Both are idempotent. `force=1` also resets `points` and `active` on habits
  * that already exist — needed exactly once, when the plan's point values change,
@@ -33,12 +34,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.query.migrate) out.migrate = await migrate()
     if (req.query.seed) out.seed = await seed(!!req.query.force)
-    if (!Object.keys(out).length) return res.status(400).json({ error: 'pass migrate=1 and/or seed=1' })
+    if (req.query.restart) out.restart = await restart(String(req.query.restart))
+    if (!Object.keys(out).length) {
+      return res.status(400).json({ error: 'pass migrate=1, seed=1, and/or restart=YYYY-MM-DD' })
+    }
     return res.status(200).json({ ok: true, ...out })
   } catch (err) {
     console.error('admin failed', err)
     return res.status(500).json({ error: String(err) })
   }
+}
+
+/**
+ * Move the plan's start date, and reset the phase clock to match.
+ *
+ * Needed whenever the plan changes mid-week: the days before the change are
+ * unticked because they were untickable, and with an earned phase gate that
+ * turns a plan edit into a repeated week. Set the start to the coming Monday and
+ * the first judged week is the first week you were actually given.
+ *
+ * Touches only the plan clock. Check-ins, notes, claims and topic history are
+ * never modified — they are the part that cannot be rebuilt.
+ */
+async function restart(day: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error('restart must be YYYY-MM-DD')
+  const { settings } = schema
+  const set = async (key: string, value: string) => {
+    await db().insert(settings).values({ key, value })
+      .onConflictDoUpdate({ target: settings.key, set: { value } })
+  }
+  await set('started_on', day)
+  await set('phase', '1')
+  await set('weeks_in_phase', '0')
+  await db().delete(settings).where(eq(settings.key, 'last_week_announced'))
+  await db().delete(settings).where(eq(settings.key, 'shelf_locked_until'))
+  await db().delete(settings).where(eq(settings.key, 'last_phase'))
+  return { startedOn: day, phase: 1, cleared: ['last_week_announced', 'shelf_locked_until', 'last_phase'] }
 }
 
 /**
