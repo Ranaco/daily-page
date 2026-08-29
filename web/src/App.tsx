@@ -23,14 +23,6 @@ export default function App() {
 
   useEffect(() => { load() }, [load])
 
-  // The halftone and the shell header are body-level. A token set on an inner
-  // element cannot reach them, so the surface is flagged on <body> itself.
-  useEffect(() => {
-    if (tab === 'journal') document.body.dataset.surface = 'journal'
-    else delete document.body.dataset.surface
-    return () => { delete document.body.dataset.surface }
-  }, [tab])
-
   // The day rolls over at 4am; re-fetch on focus so a phone left open is never stale.
   useEffect(() => {
     const onFocus = () => load()
@@ -66,7 +58,6 @@ export default function App() {
 
   return (
     <Shell>
-      {tab !== 'journal' && (
       <header>
         <div className="titlebar">
           <h1>THE DAILY PAGE</h1>
@@ -97,7 +88,6 @@ export default function App() {
           </div>
         </div>
       </header>
-      )}
 
       <nav role="tablist">
         {(['today', 'week', 'rewards', 'journal'] as Tab[]).map((t) => (
@@ -418,7 +408,7 @@ function Journal({ onSaved }: { onSaved: () => void }) {
         />
         <div className="row">
           <button className="j-save" onClick={save} disabled={!text.trim() || busy}>Save</button>
-          <span className="j-hint">Send the bot a photo or video to file it here.</span>
+          <span className="j-hint">Send the bot a photo or video, or use /proof to pick a task first.</span>
         </div>
       </div>
 

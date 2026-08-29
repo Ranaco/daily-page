@@ -69,9 +69,16 @@ async function onMedia(msg: any) {
     : msg.audio ? { kind: 'audio', f: msg.audio }
     : { kind: 'file', f: msg.document }
 
+  // /proof arms a habit first, so the file that follows arrives already
+  // attached. Stored in settings rather than held in memory: every update is a
+  // separate cold serverless invocation with nothing carried between them.
+  const pending = await getSetting('pending')
+  const armed = pending?.startsWith('attach:') ? (pending.split(':')[1] || null) : null
+
   const f = src.f
   const entry = await addEntry({
     day,
+    habitId: armed,
     kind: src.kind,
     caption: msg.caption ?? null,
     fileId: f.file_id,
@@ -83,8 +90,17 @@ async function onMedia(msg: any) {
     duration: f.duration ?? null,
   })
 
-  // Attaching is what makes it proof rather than a photo. Offer the habits that
-  // are actually live today, proof-required ones first.
+  if (armed) {
+    await setSetting('pending', '')
+    const habit = (await allHabits()).find((h) => h.id === armed)
+    // The proof gate is satisfiable now, so offer the tick here rather than
+    // making him go and find it on another surface.
+    return send(M.attachedTo(src.kind, habit?.label ?? armed), [
+      [{ text: `Tick ${habit?.label ?? armed}`, data: `t:${armed}:${day}` }],
+    ])
+  }
+
+  // Otherwise it is filed against today and we ask what it was for.
   const state = await getState(day)
   const candidates = [...state.tasks, ...state.weekly]
   candidates.sort((a, b) => Number(!!b.needsProof) - Number(!!a.needsProof))
@@ -179,6 +195,19 @@ async function onText(msg: any) {
       return send('<b>The first hour.</b> Which one today?', rows)
     }
 
+    case '/proof':
+    case '/attach': {
+      const all = [...state.tasks, ...state.weekly]
+      if (!all.length) return send('Nothing live today to attach to.')
+      all.sort((a, b) => Number(!!b.needsProof) - Number(!!a.needsProof))
+      const rows = all.map((h) => [{
+        text: h.needsProof ? `${h.label} · proof required` : h.label,
+        data: `pick:${h.id}`,
+      }])
+      rows.push([{ text: 'Cancel', data: 'pickoff' }])
+      return send(M.pickTask, rows)
+    }
+
     case '/habits': {
       const all = await allHabits()
       const rows = all.map((h) => [{
@@ -202,6 +231,26 @@ async function onCallback(cq: any) {
   const messageId = cq.message?.message_id
 
   if (kind === 'noop') return answer(cq.id, 'Noted.')
+
+  if (kind === 'pickoff') {
+    await setSetting('pending', '')
+    await answer(cq.id, 'Cancelled')
+    if (chatId && messageId) { try { await edit(chatId, messageId, 'Cancelled.') } catch {} }
+    return
+  }
+
+  if (kind === 'pick' && a) {
+    const day = logicalDay()
+    // Armed until the next file arrives. Stored rather than held in memory
+    // because every update is a cold serverless invocation.
+    await setSetting('pending', `attach:${a}:${day}`)
+    const label = (await allHabits()).find((h) => h.id === a)?.label ?? a
+    await answer(cq.id, 'Send it')
+    if (chatId && messageId) {
+      try { await edit(chatId, messageId, M.armed(label)) } catch {}
+    }
+    return
+  }
 
   if (kind === 'att' && a) {
     const habitId = b || null

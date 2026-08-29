@@ -412,6 +412,7 @@ export const help = [
   '/status — level, points, week',
   '/rewards — spend points',
   '/note — the three lines, then the number',
+  '/proof — pick a task, then send the file',
   '/habits — pause or restore habits',
   '/topic — this week\'s talk, and where you are in it',
   '/ladder — the social rungs',
@@ -466,4 +467,24 @@ export function covered(labels: string[]): string | null {
   return labels.length === 1
     ? `One miss was covered this week: <b>${list}</b>. Nothing lost.`
     : `Misses covered this week: <b>${list}</b>. Nothing lost.`
+}
+
+/** /proof — choose the task before sending the file. */
+export const pickTask = [
+  '<b>What are you filing proof for?</b>',
+  '',
+  'Pick one, then send the photo, video or screenshot. It lands attached.',
+].join('\n')
+
+export function armed(label: string): string {
+  return [
+    `<b>${esc(label)}</b> — send it now.`,
+    '',
+    'Photo, video, voice note or file. The next thing you send gets attached to this.',
+  ].join('\n')
+}
+
+export function attachedTo(kind: string, label: string): string {
+  const word = (KIND_WORD[kind] ?? 'File').toLowerCase()
+  return `Filed that ${word} against <b>${esc(label)}</b>.`
 }
