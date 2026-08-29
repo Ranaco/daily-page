@@ -6,7 +6,7 @@ import { MODES } from '../server/config.js'
 import { projectModeLeft } from '../server/plan.js'
 import { logicalDay, weekStart } from '../server/time.js'
 import {
-  addEntry, allHabits, attachEntry, claimReward, entriesOn, currentRung, getSetting, getState,
+  addEntry, allHabits, attachEntry, claimReward, createCustomHabit, entriesOn, currentRung, getSetting, getState,
   levelFor, lifetimePoints, modesInWeek, pauseHabit, saveMood, saveNote, setMode,
   setSetting, setTalkStage, shrinkHabit, talkStage, toggle, weekTopic,
 } from '../server/store.js'
@@ -130,6 +130,14 @@ async function onText(msg: any) {
       await send(mt, rows)
       return
     }
+    if (pending === 'nt:label') {
+      const label = text.slice(0, 60).trim()
+      if (!label) return send('Needs a name. Try again.')
+      await setSetting('draft', JSON.stringify({ label }))
+      await setSetting('pending', '')
+      const { text: t, rows } = M.newTaskSchedule(label)
+      return send(t, rows)
+    }
     if (pending?.startsWith('talkline:')) {
       const day = pending.slice(9)
       await setSetting(`talk_line:${weekStart(day)}`, text)
@@ -195,6 +203,12 @@ async function onText(msg: any) {
       return send('<b>The first hour.</b> Which one today?', rows)
     }
 
+    case '/newtask':
+    case '/new':
+      await setSetting('draft', '')
+      await setSetting('pending', 'nt:label')
+      return send(M.newTaskName)
+
     case '/journal': {
       const items = await entriesOn(state.today)
       return send(M.journalToday(items, state.today))
@@ -236,6 +250,62 @@ async function onCallback(cq: any) {
   const messageId = cq.message?.message_id
 
   if (kind === 'noop') return answer(cq.id, 'Noted.')
+
+  // --- /newtask wizard. The draft lives in settings because every update is
+  // --- a separate cold invocation with nothing carried between them.
+  if (kind === 'nt' && a) {
+    const draft = JSON.parse((await getSetting('draft')) || '{}')
+
+    if (a === 'sched' && b) {
+      draft.schedule = b
+      await setSetting('draft', JSON.stringify(draft))
+      await answer(cq.id)
+      const { text: t, rows } = M.newTaskPoints(draft.label)
+      if (chatId && messageId) { try { await edit(chatId, messageId, t, rows) } catch {} }
+      return
+    }
+
+    if (a === 'pts' && b) {
+      draft.points = Number(b)
+      await setSetting('draft', JSON.stringify(draft))
+      await answer(cq.id)
+      const { text: t, rows } = M.newTaskSlot(draft.label)
+      if (chatId && messageId) { try { await edit(chatId, messageId, t, rows) } catch {} }
+      return
+    }
+
+    if (a === 'slot' && b) {
+      draft.slot = b
+      await setSetting('draft', JSON.stringify(draft))
+      await answer(cq.id)
+      const { text: t, rows } = M.newTaskProof(draft.label)
+      if (chatId && messageId) { try { await edit(chatId, messageId, t, rows) } catch {} }
+      return
+    }
+
+    if (a === 'proof' && b !== undefined) {
+      draft.needsProof = b === '1'
+      const made = await createCustomHabit({
+        label: draft.label,
+        points: draft.points ?? 2,
+        slot: draft.slot ?? 'wrap',
+        schedule: draft.schedule ?? 'daily',
+        needsProof: !!draft.needsProof,
+      })
+      await setSetting('draft', '')
+      await answer(cq.id, 'Created')
+      const done = M.newTaskDone(draft.label, made.label, draft.points ?? 2, !!draft.needsProof)
+      if (chatId && messageId) { try { await edit(chatId, messageId, done) } catch {} }
+      return
+    }
+
+    if (a === 'cancel') {
+      await setSetting('draft', ''); await setSetting('pending', '')
+      await answer(cq.id, 'Cancelled')
+      if (chatId && messageId) { try { await edit(chatId, messageId, 'Cancelled.') } catch {} }
+      return
+    }
+  }
 
   if (kind === 'pickoff') {
     await setSetting('pending', '')

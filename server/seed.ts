@@ -41,7 +41,7 @@ async function main() {
     updated++
   }
 
-  const removed = existing.filter((e) => !HABITS.some((h) => h.id === e.id))
+  const removed = existing.filter((e) => !e.custom && !HABITS.some((h) => h.id === e.id))
   for (const r of removed) {
     await db().update(schema.habits).set({ active: false }).where(eq(schema.habits.id, r.id))
   }

@@ -413,6 +413,7 @@ export const help = [
   '/rewards — spend points',
   '/note — the three lines, then the number',
   '/proof — pick a task, then send the file',
+  '/newtask — add a task of your own',
   '/habits — pause or restore habits',
   '/topic — this week\'s talk, and where you are in it',
   '/ladder — the social rungs',
@@ -513,5 +514,90 @@ export function journalToday(
     ...lines,
     '',
     'daily.ranax.co → Journal for the full month.',
+  ].join('\n')
+}
+
+// ----------------------------------------------------------- making a task
+
+export const newTaskName = [
+  '<b>New task.</b> What is it called?',
+  '',
+  'Short and concrete — the words you would use to tell someone what you did.',
+].join('\n')
+
+const cancelRow: Button[] = [{ text: 'Cancel', data: 'nt:cancel' }]
+
+export function newTaskSchedule(label: string) {
+  return {
+    text: `<b>${esc(label)}</b>\n\nHow often?`,
+    rows: [
+      [{ text: 'Every day', data: 'nt:sched:daily' }],
+      [{ text: 'Weekdays', data: 'nt:sched:weekdays' },
+       { text: 'Weekends', data: 'nt:sched:weekends' }],
+      [{ text: 'Mon', data: 'nt:sched:mon' }, { text: 'Tue', data: 'nt:sched:tue' },
+       { text: 'Wed', data: 'nt:sched:wed' }, { text: 'Thu', data: 'nt:sched:thu' }],
+      [{ text: 'Fri', data: 'nt:sched:fri' }, { text: 'Sat', data: 'nt:sched:sat' },
+       { text: 'Sun', data: 'nt:sched:sun' }],
+      cancelRow,
+    ] as Button[][],
+  }
+}
+
+/**
+ * Points are the difficulty weight, not a score. Flat scoring across habits
+ * means the easy ones get farmed and the total stops meaning anything, so the
+ * question asked here is how hard it is on a bad day.
+ */
+export function newTaskPoints(label: string) {
+  return {
+    text: `<b>${esc(label)}</b>\n\nHow hard is it on a bad day?`,
+    rows: [
+      [{ text: '1 · trivial', data: 'nt:pts:1' },
+       { text: '2 · easy', data: 'nt:pts:2' },
+       { text: '3 · real', data: 'nt:pts:3' }],
+      [{ text: '4 · hard', data: 'nt:pts:4' },
+       { text: '5 · very hard', data: 'nt:pts:5' },
+       { text: '6 · the worst', data: 'nt:pts:6' }],
+      cancelRow,
+    ] as Button[][],
+  }
+}
+
+export function newTaskSlot(label: string) {
+  return {
+    text: `<b>${esc(label)}</b>\n\nWhich push should mention it first?`,
+    rows: [
+      [{ text: 'Morning · 09:15', data: 'nt:slot:morning' }],
+      [{ text: 'Before lunch · 12:15', data: 'nt:slot:lunch' }],
+      [{ text: 'After lunch · 13:20', data: 'nt:slot:midday' }],
+      [{ text: 'Evening · 21:00', data: 'nt:slot:draw' }],
+      [{ text: 'Wrap-up · 00:20', data: 'nt:slot:wrap' }],
+      cancelRow,
+    ] as Button[][],
+  }
+}
+
+export function newTaskProof(label: string) {
+  return {
+    text: [
+      `<b>${esc(label)}</b>`,
+      '',
+      'Require proof? If yes, it cannot be ticked until you attach a photo, '
+      + 'video or screenshot to it. Worth it for anything easy to claim and hard to verify.',
+    ].join('\n'),
+    rows: [
+      [{ text: 'No', data: 'nt:proof:0' }, { text: 'Yes, require proof', data: 'nt:proof:1' }],
+      cancelRow,
+    ] as Button[][],
+  }
+}
+
+export function newTaskDone(label: string, when: string, points: number, proof: boolean): string {
+  return [
+    `<b>${esc(label)}</b> — added.`,
+    '',
+    `${esc(when)} · ${points} ${points === 1 ? 'point' : 'points'}${proof ? ' · proof required' : ''}`,
+    '',
+    'Live from today. /habits to pause it, /today to see it.',
   ].join('\n')
 }

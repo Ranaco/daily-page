@@ -1,7 +1,7 @@
 import { and, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm'
 import { db, schema } from './db/client.js'
 import {
-  ALL_TOPICS, HABITS, MODES, REWARDS, SHELF_LOCK_ON_MISS, STALE_TICK_HOURS,
+  ALL_TOPICS, HABITS, MODES, REWARDS, SHELF_LOCK_ON_MISS, SLOTS, STALE_TICK_HOURS,
   PHASE_GATE, WEEK_TARGET, XP_PER_LEVEL, phaseForWeek,
 } from './config.js'
 import {
@@ -11,6 +11,9 @@ import { addDays, dayOfWeek, logicalDay, weekDays, weekIndex, weekStart } from '
 
 const { habits, checkins, claims, notes, settings, topics, modes, entries } = schema
 
+/** Display time for a slot, so a made task reads like a declared one. */
+const SLOT_TIME: Record<string, string> = SLOTS
+
 export type CellState = 'done' | 'forgiven' | 'miss' | 'future' | 'locked'
 
 export type HabitRow = {
@@ -18,6 +21,7 @@ export type HabitRow = {
   label: string; sub: string; points: number
   spine: boolean; weekly: boolean; days: number[] | null
   needsProof: boolean
+  custom: boolean
   active: boolean; sort: number
 }
 
@@ -186,6 +190,98 @@ export async function tickOnce(habitId: string, day: string) {
   await db().insert(checkins).values({ habitId, day, points: h.points })
     .onConflictDoNothing()
   return { ticked: true, points: h.points }
+}
+
+// ------------------------------------------------------------ making tasks
+
+/**
+ * The schedule presets, and what each means in the model that already exists.
+ *
+ * `days` is the set of weekdays a habit appears on (0 = Sun). `weekly` changes
+ * how it is SCORED, not when it shows: a weekly habit counts once toward the
+ * week and becomes available on the day in `days`, so a Saturday task does not
+ * drag Tuesday's percentage down. Everything else is scored per day it appears.
+ */
+export const SCHEDULES: Record<string, { label: string; days: number[] | null; weekly: boolean }> = {
+  daily:    { label: 'Every day',        days: null,            weekly: false },
+  weekdays: { label: 'Weekdays',         days: [1, 2, 3, 4, 5], weekly: false },
+  weekends: { label: 'Weekends',         days: [0, 6],          weekly: false },
+  mon: { label: 'Every Monday',    days: [1], weekly: true },
+  tue: { label: 'Every Tuesday',   days: [2], weekly: true },
+  wed: { label: 'Every Wednesday', days: [3], weekly: true },
+  thu: { label: 'Every Thursday',  days: [4], weekly: true },
+  fri: { label: 'Every Friday',    days: [5], weekly: true },
+  sat: { label: 'Every Saturday',  days: [6], weekly: true },
+  sun: { label: 'Every Sunday',    days: [0], weekly: true },
+}
+
+const DAY_NAME = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+export function describeSchedule(days: number[] | null, weekly: boolean): string {
+  if (!days) return 'Every day.'
+  if (days.length === 5 && days.every((d) => d >= 1 && d <= 5)) return 'Weekdays.'
+  if (days.length === 2 && days.includes(0) && days.includes(6)) return 'Weekends.'
+  const names = days.map((d) => DAY_NAME[d]).join(', ')
+  return weekly ? `Once a week, on ${names}.` : `On ${names}.`
+}
+
+function slug(label: string): string {
+  const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24)
+  return base || 'task'
+}
+
+/**
+ * Create a habit from the bot.
+ *
+ * Lands in the CURRENT phase, so it is live immediately — a task you just
+ * decided to track being locked behind a phase gate you have not reached would
+ * be absurd. `custom` keeps the seed reconciler from deleting it.
+ */
+export async function createCustomHabit(input: {
+  label: string
+  points: number
+  slot: string
+  schedule: string
+  needsProof: boolean
+}) {
+  const preset = SCHEDULES[input.schedule] ?? SCHEDULES.daily!
+  const base = slug(input.label)
+
+  let id = base
+  for (let n = 2; ; n++) {
+    const clash = await db().select().from(habits).where(eq(habits.id, id)).limit(1)
+    if (!clash.length) break
+    id = `${base}-${n}`
+  }
+
+  const [top] = await db().select({ m: sql<number>`coalesce(max(${habits.sort}), 0)::int` }).from(habits)
+
+  await db().insert(habits).values({
+    id,
+    phase: await currentPhase(),
+    time: SLOT_TIME[input.slot] ?? '',
+    slot: input.slot,
+    label: input.label,
+    sub: describeSchedule(preset.days, preset.weekly),
+    points: input.points,
+    spine: false,
+    weekly: preset.weekly,
+    days: preset.days ? JSON.stringify(preset.days) : null,
+    needsProof: input.needsProof,
+    custom: true,
+    active: true,
+    sort: (top?.m ?? 0) + 1,
+  })
+  return { id, ...preset }
+}
+
+/** Only a habit you made can be deleted outright; the rest are pause-only. */
+export async function deleteCustomHabit(id: string) {
+  const [h] = await db().select().from(habits).where(eq(habits.id, id)).limit(1)
+  if (!h || !h.custom) return false
+  await db().delete(checkins).where(eq(checkins.habitId, id))
+  await db().delete(habits).where(eq(habits.id, id))
+  return true
 }
 
 // ----------------------------------------------------------------- journal

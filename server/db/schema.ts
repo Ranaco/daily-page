@@ -19,6 +19,14 @@ export const habits = pgTable('habits', {
   days: text('days'),
   /** Blocks ticking until a journal entry is attached for that day. */
   needsProof: boolean('needs_proof').notNull().default(false),
+  /**
+   * Made in the bot rather than declared in config.ts.
+   *
+   * The seed reconciler deactivates anything it does not find in config, which
+   * would quietly kill every task you made yourself on the next deploy. This
+   * flag is what it checks before doing that.
+   */
+  custom: boolean('custom').notNull().default(false),
   active: boolean('active').notNull().default(true),
   sort: integer('sort').notNull().default(0),
 })

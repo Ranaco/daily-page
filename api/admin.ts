@@ -88,6 +88,7 @@ async function migrate() {
       used_on date
     )`,
     sql`alter table habits add column if not exists needs_proof boolean not null default false`,
+    sql`alter table habits add column if not exists custom boolean not null default false`,
     sql`create table if not exists entries (
       id serial primary key,
       day date not null,
@@ -150,7 +151,9 @@ async function seed(force: boolean) {
     updated++
   }
 
-  const removed = existing.filter((e) => !HABITS.some((h) => h.id === e.id))
+  // Custom habits are not in config and never will be — deactivating them here
+  // is exactly the bug this flag exists to prevent.
+  const removed = existing.filter((e) => !e.custom && !HABITS.some((h) => h.id === e.id))
   for (const r of removed) {
     await db().update(habits).set({ active: false }).where(eq(habits.id, r.id))
   }
